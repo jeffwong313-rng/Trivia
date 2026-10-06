@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Lost Boy: A Trivia Adventure</title>
+  <title>Noah: Way Home</title>
   <style>
     :root {
-      --bg-dark: #0f172a;
-      --card-bg: rgba(30, 41, 59, 0.85);
+      --bg-dark: #0b1120;
+      --card-bg: rgba(26, 38, 57, 0.92);
       --accent-red: #ef4444;
       --accent-gold: #f59e0b;
       --accent-blue: #38bdf8;
       --accent-green: #22c55e;
       --text-main: #f8fafc;
       --text-dim: #94a3b8;
+      --border-color: #334155;
     }
 
     * {
@@ -30,17 +31,17 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      overflow-x: hidden;
+      padding: 16px;
     }
 
     #game-container {
       width: 100%;
-      max-width: 950px;
-      min-height: 680px;
-      background: #1e293b;
-      border: 1px solid #334155;
+      max-width: 960px;
+      min-height: 700px;
+      background: #172554;
+      border: 1px solid var(--border-color);
       border-radius: 16px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -53,7 +54,7 @@
       flex-direction: column;
       padding: 32px;
       flex: 1;
-      animation: fadeIn 0.4s ease forwards;
+      animation: fadeIn 0.35s ease forwards;
     }
 
     .screen.active {
@@ -61,7 +62,7 @@
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
+      from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
@@ -74,16 +75,17 @@
     #hud {
       display: none;
       background: #0f172a;
-      border-bottom: 1px solid #334155;
+      border-bottom: 1px solid var(--border-color);
       padding: 12px 24px;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
     }
 
     .hud-stat-group {
       display: flex;
-      gap: 18px;
+      gap: 16px;
+      align-items: center;
     }
 
     .hud-badge {
@@ -95,12 +97,12 @@
     .hud-badge .label {
       color: var(--text-dim);
       text-transform: uppercase;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: 700;
     }
 
     .bar-container {
-      width: 90px;
+      width: 85px;
       height: 10px;
       background: #334155;
       border-radius: 5px;
@@ -116,14 +118,14 @@
     .hp-fill { background: var(--accent-red); }
     .mp-fill { background: var(--accent-blue); }
 
-    /* Button styles */
+    /* Buttons */
     .btn {
       background: #2563eb;
       color: white;
       border: none;
       border-radius: 8px;
-      padding: 12px 24px;
-      font-size: 1rem;
+      padding: 12px 22px;
+      font-size: 0.98rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -133,26 +135,31 @@
       gap: 8px;
     }
 
-    .btn:hover {
+    .btn:hover:not(:disabled) {
       background: #1d4ed8;
       transform: translateY(-1px);
     }
 
-    .btn-secondary {
-      background: #334155;
-    }
-    .btn-secondary:hover {
-      background: #475569;
+    .btn-secondary { background: #334155; }
+    .btn-secondary:hover:not(:disabled) { background: #475569; }
+    .btn-accent { background: var(--accent-red); }
+    .btn-accent:hover:not(:disabled) { background: #dc2626; }
+
+    /* Inputs */
+    input[type="text"], select {
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: white;
+      font-size: 0.95rem;
     }
 
-    .btn-accent {
-      background: var(--accent-red);
-    }
-    .btn-accent:hover {
-      background: #dc2626;
+    input[type="text"]:focus, select:focus {
+      outline: 2px solid var(--accent-blue);
     }
 
-    /* Lobby screen */
+    /* Lobby */
     .lobby-header {
       text-align: center;
       margin-bottom: 24px;
@@ -163,71 +170,58 @@
       margin-top: 6px;
     }
 
-    .player-input-row {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    input[type="text"] {
-      flex: 1;
-      background: #0f172a;
-      border: 1px solid #475569;
-      border-radius: 8px;
-      padding: 12px 16px;
-      color: white;
-      font-size: 1rem;
-    }
-
-    input[type="text"]:focus {
-      outline: 2px solid var(--accent-blue);
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
     }
 
     .player-list {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-bottom: 24px;
-      min-height: 50px;
+      margin-bottom: 20px;
+      min-height: 48px;
     }
 
     .player-tag {
-      background: #334155;
-      padding: 8px 16px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 8px 14px;
       border-radius: 20px;
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
     }
 
-    /* Cutscene Screen */
+    /* Cutscene */
     #cutscene-canvas {
       width: 100%;
       height: 380px;
-      background: #111827;
+      background: #090d16;
       border-radius: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
 
     .dialogue-box {
       background: #0f172a;
-      border: 1px solid #334155;
+      border: 1px solid var(--border-color);
       border-radius: 10px;
       padding: 16px 20px;
-      font-size: 1.1rem;
-      min-height: 70px;
-      font-style: italic;
-      color: #cbd5e1;
+      font-size: 1.05rem;
+      min-height: 65px;
+      color: #e2e8f0;
       display: flex;
       align-items: center;
     }
 
-    /* Map Navigation */
+    /* Map View */
     #map-canvas {
       width: 100%;
-      height: 480px;
-      background: #022c22;
+      height: 470px;
+      background: #064e3b;
       border-radius: 12px;
       cursor: pointer;
     }
@@ -237,8 +231,8 @@
       background: #0f172a;
       border-radius: 12px;
       padding: 24px;
-      border: 1px solid #334155;
-      margin-bottom: 20px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 16px;
     }
 
     .question-meta {
@@ -254,25 +248,29 @@
     .question-prompt {
       font-size: 1.25rem;
       line-height: 1.5;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
 
-    .confidence-selector {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .timer-container {
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
       margin-bottom: 16px;
-      padding: 10px 14px;
-      background: #1e293b;
-      border-radius: 8px;
-      font-size: 0.85rem;
+      overflow: hidden;
+    }
+
+    #question-timer-bar {
+      height: 100%;
+      width: 100%;
+      background: var(--accent-gold);
+      transition: width 1s linear;
     }
 
     .options-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
 
     .option-btn {
@@ -293,7 +291,7 @@
     }
 
     .option-btn.eliminated {
-      opacity: 0.25;
+      opacity: 0.2;
       text-decoration: line-through;
       pointer-events: none;
     }
@@ -306,7 +304,7 @@
 
     .skill-btn {
       background: #1e293b;
-      border: 1px solid #38bdf8;
+      border: 1px solid var(--accent-blue);
       color: var(--accent-blue);
       border-radius: 6px;
       padding: 8px 14px;
@@ -316,23 +314,23 @@
     }
 
     .skill-btn:disabled {
-      opacity: 0.4;
+      opacity: 0.35;
       border-color: #475569;
       color: var(--text-dim);
       cursor: not-allowed;
     }
 
-    /* Level up modal */
+    /* Level Up */
     .stat-allocator {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 14px;
-      margin: 20px 0;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+      margin: 18px 0;
     }
 
     .stat-card {
       background: #0f172a;
-      border: 1px solid #334155;
+      border: 1px solid var(--border-color);
       border-radius: 8px;
       padding: 14px;
       display: flex;
@@ -347,8 +345,12 @@
     <header id="hud">
       <div class="hud-stat-group">
         <div class="hud-badge">
-          <span class="label">Turn:</span>
-          <span id="hud-active-player" style="font-weight: 700; color: var(--accent-gold);">Player</span>
+          <span class="label">Party:</span>
+          <span id="hud-party-name" style="font-weight: 700; color: var(--accent-gold);">Party</span>
+        </div>
+        <div class="hud-badge">
+          <span class="label">Noah:</span>
+          <span id="hud-art-tier" style="color: var(--accent-blue); font-weight: 600;">Sketch (Lv 1)</span>
         </div>
         <div class="hud-badge">
           <span class="label">HP:</span>
@@ -358,13 +360,13 @@
         <div class="hud-badge">
           <span class="label">MP:</span>
           <div class="bar-container"><div id="mp-bar" class="bar-fill mp-fill" style="width: 100%;"></div></div>
-          <span id="hud-mp-text">5/5</span>
+          <span id="hud-mp-text">10/10</span>
         </div>
       </div>
       <div class="hud-stat-group">
         <div class="hud-badge">
-          <span class="label">Map:</span>
-          <span id="hud-map-node">1 (Node 1)</span>
+          <span class="label">Biome:</span>
+          <span id="hud-biome-name">Grassland Outskirts</span>
         </div>
         <div class="hud-badge">
           <span class="label">Rerolls:</span>
@@ -373,20 +375,40 @@
       </div>
     </header>
 
-    <!-- SCREEN 1: PARTY LOBBY -->
+    <!-- SCREEN 1: LOBBY & SETUP -->
     <section id="screen-lobby" class="screen active">
       <div class="lobby-header">
-        <h1>🎈 The Lost Boy</h1>
-        <p>A Branching Trivia RPG for Parties</p>
+        <h1>🎈 Noah: Way Home</h1>
+        <p>A Collaborative Trivia Adventure Through 8 Biomes</p>
       </div>
 
-      <div class="player-input-row">
-        <input type="text" id="player-name-input" placeholder="Enter player or team name..." autofocus />
-        <button id="btn-add-player" class="btn btn-secondary">Add Player</button>
+      <div class="config-grid">
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-dim); font-weight: 700;">DIFFICULTY MODE</label>
+          <select id="select-difficulty" style="width: 100%; margin-top: 6px;">
+            <option value="chill">Chill (+10s timer, foundational questions)</option>
+            <option value="standard" selected>Standard (30s timer, progressive scaling)</option>
+            <option value="hard">Hard (-5s timer, advanced tier focus)</option>
+            <option value="very_hard">Very Hard (-10s timer, master tier & high stakes)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-dim); font-weight: 700;">ADD TEAM PLAYERS</label>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <input type="text" id="player-name-input" placeholder="Enter player name..." style="flex: 1;" />
+            <button id="btn-add-player" class="btn btn-secondary">Add</button>
+          </div>
+        </div>
       </div>
 
-      <h3 style="margin-bottom: 10px; font-size: 0.95rem; color: var(--text-dim);">PARTY ROSTER:</h3>
+      <h3 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-dim);">PARTY ROSTER (Collaborative Team):</h3>
       <div id="player-roster" class="player-list"></div>
+
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem; color: var(--text-dim);">
+        <strong style="color: var(--accent-blue);">Party Scaling:</strong> 
+        <span id="party-scaling-desc">1 Player (Solo: 0.80x question difficulty)</span>. 
+        All players solve every question collectively. HP, MP, and Reroll pools remain unified.
+      </div>
 
       <div style="margin-top: auto; display: flex; justify-content: flex-end;">
         <button id="btn-start-adventure" class="btn btn-accent" style="display: none;">
@@ -395,45 +417,39 @@
       </div>
     </section>
 
-    <!-- SCREEN 2: STORY INTRO CUTSCENE -->
+    <!-- SCREEN 2: CUTSCENE -->
     <section id="screen-cutscene" class="screen">
-      <canvas id="cutscene-canvas" width="880" height="380"></canvas>
+      <canvas id="cutscene-canvas" width="896" height="380"></canvas>
       <div id="cutscene-dialogue" class="dialogue-box">...</div>
-      <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+      <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
         <button id="btn-cutscene-next" class="btn">Next ➔</button>
       </div>
     </section>
 
-    <!-- SCREEN 3: MAP / NODE SELECTION -->
+    <!-- SCREEN 3: BIOME MAP -->
     <section id="screen-map" class="screen">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3>The Grassland Trails (Ascend to the Boss)</h3>
-        <span style="font-size: 0.85rem; color: var(--text-dim);">Click an available path to advance</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 id="map-header-title">Map 1: Grassland Outskirts</h3>
+        <span style="font-size: 0.85rem; color: var(--text-dim);">Select an available node to advance</span>
       </div>
-      <canvas id="map-canvas" width="880" height="480"></canvas>
+      <canvas id="map-canvas" width="896" height="470"></canvas>
     </section>
 
-    <!-- SCREEN 4: TRIVIA / BOSS COMBAT -->
+    <!-- SCREEN 4: TRIVIA QUESTION -->
     <section id="screen-question" class="screen">
       <div class="question-card">
         <div class="question-meta">
           <span id="q-category">General Knowledge</span>
-          <span id="q-elo">Difficulty: Adept</span>
-        </div>
-        <p id="q-prompt" class="question-prompt">Question text goes here...</p>
-
-        <div class="confidence-selector">
-          <label style="font-weight: 600;">Confidence Level (Strength Bonus):</label>
-          <select id="confidence-select" style="background: #0f172a; color: white; border: 1px solid #475569; padding: 4px 8px; border-radius: 4px;">
-            <option value="1">Cautious (Low EXP, Minimal HP loss)</option>
-            <option value="2" selected>Standard (Normal EXP & Damage)</option>
-            <option value="3">Unshakable (High EXP, Heavy Damage on Mistake)</option>
-          </select>
+          <span id="q-elo-label">Difficulty: Adept</span>
         </div>
 
+        <div class="timer-container">
+          <div id="question-timer-bar"></div>
+        </div>
+
+        <p id="q-prompt" class="question-prompt">Question prompt...</p>
         <div id="q-options" class="options-grid"></div>
-
-        <div id="hint-display" style="display: none; padding: 10px; background: rgba(56, 189, 248, 0.1); border-left: 3px solid var(--accent-blue); margin-bottom: 14px; font-size: 0.95rem;"></div>
+        <div id="hint-display" style="display: none; padding: 10px; background: rgba(56, 189, 248, 0.1); border-left: 3px solid var(--accent-blue); margin-bottom: 12px; font-size: 0.9rem;"></div>
 
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div class="skills-bar">
@@ -441,22 +457,23 @@
             <button id="skill-hint" class="skill-btn">Subtle Hint (2 MP)</button>
             <button id="skill-reroll" class="skill-btn" style="border-color: var(--accent-gold); color: var(--accent-gold);">Reroll (Charisma)</button>
           </div>
+          <span id="boss-warning" style="display: none; color: var(--accent-red); font-weight: 700; font-size: 0.85rem;">⚠️ GAUNTLET BOSS ENCOUNTER</span>
         </div>
       </div>
     </section>
 
     <!-- SCREEN 5: LEVEL UP ALLOCATION -->
     <section id="screen-levelup" class="screen">
-      <h2>✨ Level Up!</h2>
-      <p style="color: var(--text-dim); margin-bottom: 16px;">Allocate 1 S.P.E.C.I.A.L. point to enhance the lost boy's abilities:</p>
+      <h2>✨ Noah Levels Up!</h2>
+      <p style="color: var(--text-dim); margin-bottom: 12px;">Noah's form becomes clearer. Allocate 1 S.P.E.C.I.A.L. point to empower the party:</p>
       <div id="stat-allocation-grid" class="stat-allocator"></div>
     </section>
 
-    <!-- SCREEN 6: RUN SUMMARY & LEADERBOARD -->
+    <!-- SCREEN 6: OUTCOME & LEADERBOARD -->
     <section id="screen-leaderboard" class="screen">
       <h2>🏆 Adventure Outcome</h2>
-      <p id="run-summary-text" style="color: var(--text-dim); margin: 12px 0 20px;"></p>
-      <div id="leaderboard-table-container" style="background: #0f172a; padding: 16px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 24px;"></div>
+      <p id="run-summary-text" style="color: var(--text-dim); margin: 10px 0 16px;"></p>
+      <div id="leaderboard-table-container" style="background: #0f172a; padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;"></div>
       <button id="btn-restart-run" class="btn btn-accent">Play Another Run</button>
     </section>
   </div>
