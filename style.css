@@ -1,21 +1,16 @@
-@layer utilities {
-  .transition-all-fast {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  }
+/* Feedback States */
+.choice-btn.correct-highlight {
+  border-color: #4B9CD3 !important;
+  outline: 3px solid #4B9CD3;
+  outline-offset: 2px;
+  background-color: rgba(75, 156, 211, 0.12);
+  color: #ffffff;
+  opacity: 1 !important;
+  transform: none;
 }
 
-.option-btn {
-  @apply w-full p-4 text-left rounded-xl bg-slate-800/80 border border-slate-700/80 text-slate-200 text-sm font-medium hover:bg-slate-750 hover:border-indigo-500/50 active:scale-[0.99] transition-all;
-}
-
-.option-correct {
-  @apply bg-emerald-950/80 border-emerald-500 text-emerald-100 hover:bg-emerald-950/80 !important;
-}
-
-.option-incorrect {
-  @apply bg-rose-950/80 border-rose-500 text-rose-200 hover:bg-rose-950/80 !important;
-}
-
-.option-disabled {
-  @apply cursor-default opacity-85 active:scale-100;
+.choice-btn.dimmed {
+  opacity: 0.70 !important;
+  filter: grayscale(20%);
+  cursor: default;
 }
