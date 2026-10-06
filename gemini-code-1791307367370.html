@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adaptive Trivia</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center p-4 sm:p-6 font-sans antialiased">
+  <main class="w-full max-w-3xl flex flex-col gap-6 my-auto">
+    
+    <!-- Top Bar: Metrics & Analytics -->
+    <header class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-6">
+        <div>
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block">Player ELO</span>
+          <span id="player-elo" class="text-2xl font-bold text-indigo-400">1200</span>
+        </div>
+        <div>
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block">Answered</span>
+          <span id="total-answered" class="text-2xl font-bold text-slate-200">0</span>
+        </div>
+        <div>
+          <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold block">Accuracy</span>
+          <span id="accuracy-rate" class="text-2xl font-bold text-emerald-400">0%</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div id="weakest-topic-badge" class="hidden text-xs px-3 py-1.5 rounded-full bg-rose-950/60 text-rose-300 border border-rose-800/60 font-medium">
+          Focus: <span id="weakest-topic-name">None</span>
+        </div>
+        <button id="reset-stats-btn" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Reset</button>
+      </div>
+    </header>
+
+    <!-- Main Game Card -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col gap-6">
+      
+      <!-- Metadata Row -->
+      <div class="flex items-center justify-between text-xs font-semibold tracking-wider uppercase text-slate-400">
+        <span id="question-category" class="px-2.5 py-1 rounded-md bg-slate-800 text-indigo-300 border border-slate-700/60">Category</span>
+        <div class="flex items-center gap-3">
+          <span id="srs-status" class="hidden text-amber-400 font-mono">🔁 Review Card</span>
+          <span id="question-difficulty" class="text-slate-400 font-mono">Diff: 1200</span>
+        </div>
+      </div>
+
+      <!-- Question Text -->
+      <h1 id="question-text" class="text-xl sm:text-2xl font-semibold leading-relaxed text-slate-100 min-h-[4rem] flex items-center">
+        Loading question...
+      </h1>
+
+      <!-- Options Grid -->
+      <div id="options-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- 4 buttons dynamically populated -->
+      </div>
+
+      <!-- Inline Explanation Panel -->
+      <div id="explanation-panel" class="hidden border-t border-slate-800 pt-5 mt-2 flex flex-col gap-4">
+        <div class="flex items-start gap-3">
+          <div id="feedback-icon" class="text-2xl leading-none"></div>
+          <div>
+            <h2 id="feedback-headline" class="text-base font-bold"></h2>
+            <p id="explanation-text" class="text-sm text-slate-300 leading-relaxed mt-1"></p>
+          </div>
+        </div>
+        
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800/60">
+          <span id="elo-delta-display" class="text-xs font-mono text-slate-400"></span>
+          <button id="next-question-btn" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition-all shadow-lg shadow-indigo-950/50 hover:shadow-indigo-600/30">
+            Next Question →
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Category Mastery Matrix -->
+    <section class="bg-slate-900/60 border border-slate-800/60 rounded-2xl p-5 shadow-lg">
+      <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">Domain Mastery Breakdown</h3>
+      <div id="category-matrix" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+        <!-- Injected via app.js -->
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>
