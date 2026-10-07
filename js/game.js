@@ -360,6 +360,7 @@ export class Game {
   recordScore(outcome) {
     const s = this.s;
     if (s.recorded) return;
+    if (this.src.testMode) { s.recorded = true; return; }   // test runs stay off the leaderboard
     s.recorded = true;
     const entry = {
       party: s.partyName, players: s.players, size: s.partySize, mode: MODES[s.mode].name,

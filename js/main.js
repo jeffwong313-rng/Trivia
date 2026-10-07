@@ -31,7 +31,8 @@ function showTitle() {
   <div class="screen center">
     <div class="title-wrap">
       <div class="title-noah">${drawNoah(1, { size: 190 })}</div>
-      <h1 class="title">Noah<span class="colon">:</span> Way Home</h1>
+      <h1 class="title">No<span class="tap-a">a</span>h<span class="colon">:</span> W<span class="tap-a">a</span>y Home</h1>
+      ${source.testMode ? '<div class="chip red test-badge">TEST MODE · every question is a placeholder</div>' : ''}
       <p class="tagline">A lost boy, barely a sketch, holding a red balloon. Answer together, and draw him home.</p>
     </div>
     <div class="stack" style="margin-top:22px">
@@ -44,6 +45,20 @@ function showTitle() {
     </div>
   </div>`;
   app.onclick = (e) => {
+    // Secret: click an "a" in the title 10 times in a row to toggle test mode.
+    if (e.target.closest('.tap-a')) {
+      const now = Date.now();
+      ui.taps = now - (ui.lastTap || 0) < 1500 ? (ui.taps || 0) + 1 : 1;
+      ui.lastTap = now;
+      if (ui.taps >= 10) {
+        ui.taps = 0;
+        source.testMode = !source.testMode;
+        showTitle();
+        toast(source.testMode ? 'Test mode on: every question is a placeholder.' : 'Test mode off.');
+      }
+      return;
+    }
+    ui.taps = 0;
     const a = e.target.closest('[data-act]')?.dataset.act;
     if (a === 'new') showSetup();
     if (a === 'continue') { game.load(); renderGame(); }
@@ -167,7 +182,7 @@ function hudHTML() {
     ${bar('mp', 'MP', s.mp, game.maxMp)}
     ${bar('exp', 'EXP', s.exp, game.expNeed)}
     <div class="statline">${Object.keys(STATS).map((k) => `<div title="${STATS[k].name}: ${STATS[k].blurb}"><b>${s.stats[k]}</b>${k}</div>`).join('')}</div>
-    <div class="skills-mini"><span class="chip red">${s.rerolls} reroll${s.rerolls === 1 ? '' : 's'}</span>${s.tetherArmed ? '<span class="chip">Tether ready</span>' : ''}${s.pendingTopic ? `<span class="chip">Next: ${esc(s.pendingTopic)}</span>` : ''}${skills}</div>
+    <div class="skills-mini">${source.testMode ? '<span class="chip red">TEST MODE</span>' : ''}<span class="chip red">${s.rerolls} reroll${s.rerolls === 1 ? '' : 's'}</span>${s.tetherArmed ? '<span class="chip">Tether ready</span>' : ''}${s.pendingTopic ? `<span class="chip">Next: ${esc(s.pendingTopic)}</span>` : ''}${skills}</div>
     <div class="hud-actions"><button class="btn small ghost link" data-act="quit">Save & quit</button><button class="btn small ghost link" data-act="howin">Help</button></div>
   </aside>`;
 }

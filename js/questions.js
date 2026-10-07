@@ -132,11 +132,22 @@ export class QuestionSource {
     });
   }
 
+  // ── Developer test mode: every question is the same, so testing spoils nothing ──
+  get testMode() { try { return localStorage.getItem('noah_test') === '1'; } catch { return false; } }
+  set testMode(on) { try { on ? localStorage.setItem('noah_test', '1') : localStorage.removeItem('noah_test'); } catch {} }
+  testQuestion(tier, kind) {
+    return { id: 'TEST', kind, source: 'test', topic: 'Test Mode', subtopic: 'Test Mode', tier, test: true,
+      prompt: 'Questions: Testing in progress', answers: ['Answer', 'Wrong', 'Wrong', 'Wrong'], correct: 0,
+      hints: ['Test hint 1: it is not "Wrong".', 'Test hint 2: it starts with A.', 'Test hint 3: pick A.'] };
+  }
+
   markSeen(q) {
+    if (q.test) return;
     this.seen.add(q.id);
     try { localStorage.setItem('noah_seen', JSON.stringify([...this.seen].slice(-3000))); } catch {}
   }
   markMissed(q) {
+    if (q.test) return;
     if (q.kind !== 'trivia') return;
     this.missed = [q, ...this.missed.filter((m) => m.id !== q.id)].slice(0, 40);
     try { localStorage.setItem('noah_missed', JSON.stringify(this.missed)); } catch {}
@@ -150,6 +161,7 @@ export class QuestionSource {
   // Get a question of a tier. kind: 'trivia' | 'puzzle'. opts.topic biases a topic.
   get(tier, kind = 'trivia', opts = {}) {
     tier = Math.max(1, Math.min(4, Math.round(tier)));
+    if (this.testMode) return this.testQuestion(tier, kind);
     if (kind === 'puzzle') return makePuzzle(tier, this.seen);
 
     // Missed-question recurrence (Game_Overview): occasionally bring one back
