@@ -1,99 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arcane Codex - Digital Fantasy Trivia</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=IM+Fell+English+SC&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Noah: Way Home</title>
+  <meta name="description" content="A cooperative trivia adventure. Help Noah, a lost sketch of a boy with a red balloon, find his way home.">
+  <meta name="theme-color" content="#efe8da">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cellipse cx=%2716%27 cy=%2712%27 rx=%279%27 ry=%2711%27 fill=%27%23c0392b%27/%3E%3Cpath d=%27M16 23 Q13 27 17 31%27 stroke=%27%232c2723%27 fill=%27none%27/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="sketch-vignette"></div>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="crest-icon">📜</div>
-            <h1>Arcane Codex Trivia</h1>
-            <p class="subtitle">A Digital Fantasy Grimoire of Knowledge</p>
-        </header>
-
-        <!-- Main Card / Screen Container -->
-        <main class="grimoire-card">
-            <!-- Start Screen -->
-            <section id="start-screen" class="screen active">
-                <div class="parchment-banner">
-                    <h2>Enter the Trials of Wisdom</h2>
-                    <p>Test your mastery across realms. Featuring adaptive ELO progression, spaced repetition, and immediate arcane insights.</p>
-                </div>
-                <div class="settings-grid">
-                    <div class="setting-group">
-                        <label for="category-select">Realm of Study:</label>
-                        <select id="category-select">
-                            <option value="all">All Realms (General Codex)</option>
-                            <option value="history">Mythos & History</option>
-                            <option value="science">Arcane Sciences</option>
-                            <option value="arts">Arts & Lore</option>
-                        </select>
-                    </div>
-                    <div class="setting-group">
-                        <label for="mode-select">Trial Mode:</label>
-                        <select id="mode-select">
-                            <option value="standard">Standard Codex (10 Trials)</option>
-                            <option value="endless">Endless Grimoire</option>
-                            <option value="spaced">Spaced Repetition (SM-2)</option>
-                        </select>
-                    </div>
-                </div>
-                <button id="start-btn" class="sketch-btn primary-btn">Inveigle Trial (Start Game)</button>
-            </section>
-
-            <!-- Quiz Screen -->
-            <section id="quiz-screen" class="screen">
-                <div class="quiz-hud">
-                    <span id="progress-indicator">Trial 1 of 10</span>
-                    <span id="elo-badge">ELO: 1200</span>
-                </div>
-                <div class="question-scroll">
-                    <h2 id="question-text">Loading arcane inquiry...</h2>
-                </div>
-                <div id="options-container" class="options-grid">
-                    <!-- Dynamically populated options -->
-                </div>
-                <div id="explanation-box" class="explanation-box hidden">
-                    <h3>Arcane Insight</h3>
-                    <p id="explanation-text"></p>
-                    <button id="next-btn" class="sketch-btn">Proceed &rarr;</button>
-                </div>
-            </section>
-
-            <!-- Results Screen -->
-            <section id="results-screen" class="screen">
-                <div class="parchment-banner">
-                    <h2>Trial Concluded</h2>
-                    <p id="final-score-summary">You have completed your trials with honor.</p>
-                </div>
-                <div class="stats-summary">
-                    <div class="stat-box">
-                        <span class="stat-label">Correct Trials</span>
-                        <span id="stat-correct" class="stat-value">0/10</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-label">Updated ELO</span>
-                        <span id="stat-elo" class="stat-value">1200</span>
-                    </div>
-                </div>
-                <div class="results-actions">
-                    <button id="restart-btn" class="sketch-btn primary-btn">New Trial</button>
-                    <button id="export-btn" class="sketch-btn">Export Progress (JSON)</button>
-                </div>
-            </section>
-        </main>
-
-        <!-- Footer HUD -->
-        <footer class="app-footer">
-            <span>Stored in Local Grimoire • <a href="#" id="reset-data">Reset Progress</a></span>
-        </footer>
-    </div>
-    <script src="app.js"></script>
+  <div id="defs"></div>
+  <div class="paper"></div>
+  <main id="app" aria-live="polite"></main>
+  <noscript>Noah needs JavaScript to find his way home.</noscript>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
