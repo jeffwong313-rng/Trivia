@@ -98,6 +98,8 @@ button:disabled { cursor: not-allowed; }
   transform: rotate(-2deg);
 }
 .title .colon { color: var(--red); }
+.title .tap-a { cursor: default; user-select: none; -webkit-user-select: none; }
+.test-badge { margin-top: 8px; font-size: .95rem; }
 .tagline { font-size: 1.25rem; color: var(--ink-soft); max-width: 30ch; text-align: center; }
 .title-noah { animation: drift 6s ease-in-out infinite; margin: 6px 0 4px; }
 @keyframes drift { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-10px) rotate(1deg); } }
