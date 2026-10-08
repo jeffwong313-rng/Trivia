@@ -1,48 +1,53 @@
 # Noah: Way Home
 
-A cooperative trivia adventure. Noah is a lost little boy — at first barely a pencil outline — holding a red balloon. Answer questions together to guide him up through eight lands, fog and hedges and faceless guardians, until he finds his way home. Every level he gains, his drawing fills in a little more.
+A cooperative trivia adventure. Noah is a lost little boy — at first barely a pencil sketch — holding a red balloon. Answer questions together to guide him up through eight lands, past fog, hedges and faceless guardians, until he finds his way home. Every level he gains, his drawing fills in a little more.
 
-**Play:** open `index.html` through any web server, or turn on GitHub Pages for this repo (Settings → Pages → Deploy from branch → `main` / root). No build step.
+**Play:** turn on GitHub Pages for this repo (Settings → Pages → Deploy from branch → `main` / root). No build step, no accounts.
 
 ## How it plays
 
-- **One team, one Noah.** Everyone shares one HP bar, one mana bar, one answer. There are no turns or roles: talk it over, then lock in.
-- **More friends = harder road**, not different rules. Party multiplier (from the design sheet): solo 0.8×, duo 1.9×, trio 3.25×, four 4.5×. It pushes questions toward harder tiers and makes wrong answers sting more. Groups get +10s on the timer to talk.
-- **Map:** branching paths of 2–4 nodes per row, climbing upward. Fog hides what's ahead; Perception lifts it. Node types: question, puzzle, `?` mystery, rare campfire, and the boss at the top.
-- **Confidence wager** on every answer: Unsure / I think / Sure / Certain. Higher = more EXP if right, more HP lost if wrong.
-- **Stats (SPECIAL + Luck):** one point per level-up. Formulas in `js/config.js`.
-- **Skills:** one new skill or upgrade every 4 level-ups — Eliminate → 50/50 → Truth, Subtle Hint → Hint → More than a Hint, Time Dilation, Ghostly Tether.
-- **Bosses:** 5 questions, each mistake tears away a share of current HP. 2 mistakes ends the run; from map 4 on, 1 mistake does.
-- **Eight lands:** Grassland Outskirts → Whispering Steppes → Shifting Dunes → Mirage Wastes → Craggy Foothills → Mistveiled Crags → Glacial Ascent → Beacon Summit.
-- **Leaderboard:** saved on this device. Score = depth reached + correct answers, with a small speed bonus.
-- Runs auto-save; close the tab and pick up later with *Continue*.
+- **One team, one Noah.** Everyone shares one HP bar, one mana bar, one answer. No turns, no roles.
+- **Party size = difficulty**, not different rules: Solo 0.8× · Partner 1.9× · Trio 3.25× · Quartet 4.5× · Party (5+) 5.75×.
+- **Answer + confidence in one tap.** Each answer is split in three: left = *not sure*, middle = *sure*, right = *definitely*. Then **Lock in** (bottom right).
+- **No timer.** Speed still adds a small score bonus that fades out at 2 minutes.
+- **Map:** almost every step offers 3 paths. *Perception* reveals each path's topic (level 2) and difficulty (level 3).
+- **Difficulty ramp:** map 1 is nearly all easy questions; it climbs steadily from there. Bosses: map 1 ends on the 3rd mistake, maps 2–5 on the 2nd, maps 6–8 on the 1st.
+- **Topics screen:** 34 topics, all on by default — untick anything the group doesn't want.
+- **Too obscure?** Flag a question: free swap, never shown again. Open Trivia DB questions about exact years, release dates, episodes, album tracks etc. are filtered out automatically; landmark dates (1776, 1969, 2001…) come from the hand-written bank.
+- **Stats (SPECIAL + Luck)**, **skills** every 4 levels (Eliminate → 50/50 → Truth, Hint ladder, Second Guess, Ghostly Tether), `?` events, campfires, 8 biomes, auto-save, local leaderboard.
 
-## Questions
+## TV + phones
 
-- **Open Trivia DB** (free, thousands of questions, easy/medium/hard → tiers 1–3).
-- **Generated puzzles:** number series, letter series, "which shape comes next", odd-one-out — endless and tiered.
-- **Hand-written logic riddles** and a built-in fallback bank, used offline or if the API is busy.
-- Questions you miss come back now and then (the sheet's "missed question recurrence").
+1. Open the game on whatever drives the TV (laptop on HDMI, a cast Chrome tab, or a TV browser) and choose **Play on a TV with phones**.
+2. Everyone scans the QR code (or opens the game on their phone, taps **Join a game**, and types the 4-letter code).
+3. Each phone shows the question; people pick privately. When everyone has picked, the picks are revealed on the TV, you discuss, someone taps **Use my pick as the team answer** (or adjusts on the TV), and anyone locks it in.
+4. Phones mirror every button on the TV screen — paths, level-ups, setup, topics — so the game can be run entirely from phones.
+
+Phones connect straight to the TV page with WebRTC via PeerJS's free public broker (no accounts or server to run). A keyboard or TV remote also works: arrows move, Enter selects, 1–4 picks an answer (press again to change how sure).
+
+## Test mode
+
+Click either "a" in the title 10 times in a row. Every question becomes "Questions: Testing in progress" (A = Answer, B–D = Wrong). Test runs stay off the leaderboard. Same again to turn it off.
 
 ## Tuning
 
-Every number lives in **`js/config.js`**: party scaling, modes, tier EXP/damage, confidence, the EXP curve, stat formulas, skills, maps and bosses. After a few playtests, that's the only file you should need to touch.
+Every number lives in **`js/config.js`**: party scaling, modes, tier EXP/damage, confidence, per-map difficulty, boss rules, the EXP curve, stat formulas, skills and the topic list.
 
 ## Files
 
 ```
-index.html        page shell
-css/style.css     paper-and-pencil look
-js/config.js      all the numbers
-js/game.js        rules and run state (one plain object, so online rooms can sync it later)
-js/map.js         branching map generator
-js/questions.js   Open Trivia DB + fallback bank + auto hints
-js/puzzles.js     IQ-style puzzle generators and riddles
-js/art.js         Noah, bosses, shapes and the map, all drawn as sketchy SVG
-js/main.js        screens and controls
+index.html          page shell
+css/style.css       paper-and-pencil look (scales up on TVs)
+js/config.js        all the numbers + topic list
+js/game.js          rules and run state
+js/map.js           branching map generator
+js/questions.js     Open Trivia DB (filtered) + hand-written bank + hints
+js/puzzles.js       brain teasers: colors, spelling, math, patterns, shapes, riddles, word play, odd one out, emoji
+js/art.js           Noah, bosses, shapes, map — all drawn as sketchy SVG
+js/main.js          big-screen UI, keyboard/remote navigation
+js/remote.js        phone room (PeerJS)
+js/phone.js         phone controller UI
+js/vendor/          PeerJS 1.5.4 and qrcode-generator 1.4.4 (both MIT)
 ```
 
-## Not yet
-
-- **Online rooms** (each friend on their own phone): the game state is already a single serializable object; the next step is syncing it through a small free service such as Firebase.
-- Boss special rules from the Skills_Combat tab (shuffling distractors, locked wagers, etc.).
+When uploading by hand, keep the `css/`, `js/` and `js/vendor/` folders — files dropped loose at the top level won't be found.

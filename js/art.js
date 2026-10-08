@@ -1,6 +1,6 @@
 // All the art is drawn in code as rough pencil-sketch SVG, so Noah can
 // gradually "fill in" as the party levels up. No image files needed.
-import { NOAH_TIERS } from './config.js';
+import { NOAH_TIERS, TOPICS, TIERS } from './config.js';
 
 // Seeded random so a sketch doesn't wiggle every time the screen redraws.
 function rng(seed) {
@@ -56,6 +56,17 @@ export const SVG_DEFS = `
       <feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
     <filter id="ghost"><feGaussianBlur stdDeviation="1.2"/></filter>
+    <filter id="soft" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="11" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feGaussianBlur in="d" stdDeviation="0.25"/>
+    </filter>
+    <filter id="wash" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="5" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feGaussianBlur in="d" stdDeviation="0.9"/>
+    </filter>
+    <radialGradient id="noahAura"><stop offset="0" stop-color="#e3e8ff" stop-opacity=".5"/><stop offset="1" stop-color="#e3e8ff" stop-opacity="0"/></radialGradient>
     <radialGradient id="balloonGlow"><stop offset="0" stop-color="#ff6b6b" stop-opacity=".7"/><stop offset="1" stop-color="#ff6b6b" stop-opacity="0"/></radialGradient>
     <radialGradient id="beacon"><stop offset="0" stop-color="#fff6c8"/><stop offset=".4" stop-color="#ffd86b" stop-opacity=".6"/><stop offset="1" stop-color="#ffd86b" stop-opacity="0"/></radialGradient>
   </defs>
@@ -68,78 +79,108 @@ export function noahTier(level) {
 }
 
 // ── Noah ──────────────────────────────────────────────────────
-// level drives how "drawn in" he is. 0 = faint outline, 3 = fully painted.
+// A small boy in a t-shirt and trousers, holding a red balloon. He starts as
+// a faint pencil sketch — light construction lines you can barely make out —
+// and gets clearer, then softly painted, as the party levels up.
 export function drawNoah(level, { walking = false, size = 200 } = {}) {
   const tier = noahTier(level);
-  const within = Math.min(1, (level - NOAH_TIERS[tier].from) / 4);   // progress inside a tier
-  const r = rng('noah' + tier);
-  const ink = tier === 0 ? '#5f6470' : '#2c2723';
-  const lineOp = tier === 0 ? 0.35 + within * 0.25 : 0.9;
-  const passes = tier === 0 ? 3 : 2;
-  const j = tier === 0 ? 2.6 : tier === 1 ? 1.6 : 1.1;
-  const dash = tier === 0 ? '7 4 2 4' : '';
-  const L = (pts, o = {}) => strokes(pts, r, { passes, j, color: ink, op: lineOp, dash, w: 2.2, ...o });
+  const from = NOAH_TIERS[tier].from, to = NOAH_TIERS[tier + 1]?.from ?? from + 4;
+  const within = Math.max(0, Math.min(1, (level - from) / (to - from)));
+  const r = rng('noah-v2-' + tier);
+  const st = [
+    { ink: '#8a847c', op: 0.26 + 0.14 * within, passes: 3, j: 1.9, w: 1.15 },
+    { ink: '#625b53', op: 0.55 + 0.2 * within,  passes: 3, j: 1.3, w: 1.35 },
+    { ink: '#4d463f', op: 0.78,                  passes: 2, j: 1.0, w: 1.5 },
+    { ink: '#3d3631', op: 0.88,                  passes: 2, j: 0.8, w: 1.6 },
+  ][tier];
+  const L = (pts, o = {}) => strokes(pts, r, { passes: st.passes, j: st.j, color: st.ink, op: st.op, w: st.w, ...o });
 
-  const skin = '#f2d7bd', tunic = '#6d8db5', pants = '#5b4a3f', hair = '#4a3426', shoe = '#3b2f28';
-  const fillOp = tier < 2 ? 0 : tier === 2 ? 0.35 + within * 0.3 : 0.88;
-  const off = tier === 2 ? 3 : 0; // cel-shade offset: paint not quite lined up with the ink
-  const paint = (d, c) => fillOp ? `<path d="${d}" fill="${c}" opacity="${fillOp.toFixed(2)}" transform="translate(${off},${off * 0.6})"/>` : '';
+  // ── Shapes (viewBox 0 -30 200 310, feet on y≈268) ──
+  const headD = sketchPath(circlePts(100, 88, 21, 23, 18, 0, 1), rng('hd'), 0.5, true);
+  const hairD = 'M79,86 Q78,66 92,62 Q100,57 109,61 Q122,65 121,86 Q117,74 110,73 Q104,70 100,74 Q94,69 88,73 Q82,75 79,86 Z';
+  const shirtD = 'M86,119 L93,116 Q100,121 107,116 L114,119 L127,137 L120,144 L115,138 L115,180 L85,180 L85,138 L80,144 L73,137 Z';
+  const pantsD = 'M85,178 L115,178 L114,256 L103,256 L100,198 L97,256 L86,256 Z';
+  const shoesD = 'M84,256 L98,256 Q99,264 92,265 L80,265 Q79,259 84,256 Z M102,256 L116,256 Q121,259 120,265 L108,265 Q101,264 102,256 Z';
+  const colors = { skin: '#f0d5bf', hair: '#7a5638', shirt: '#93afcf', pants: '#7c6a58', shoes: '#4d423a' };
 
-  // Balloon state (Game_Overview: pale → crimson → orb with particles → glowing ruby)
-  const balloonFill = ['#e9b8b8', '#c0392b', '#d63031', '#e8303a'][tier];
-  const balloonOp = [0.25 + within * 0.25, 0.8, 0.9, 1][tier];
+  let paint = '';
+  if (tier >= 2) {
+    const op = tier === 2 ? 0.38 + 0.25 * within : 0.82;
+    const off = tier === 2 ? 'translate(2.5,1.5)' : '';
+    paint = `<g filter="url(#wash)" opacity="${op.toFixed(2)}" transform="${off}">
+      <path d="${pantsD}" fill="${colors.pants}"/><path d="${shirtD}" fill="${colors.shirt}"/>
+      <path d="${headD}" fill="${colors.skin}"/><path d="${hairD}" fill="${colors.hair}"/><path d="${shoesD}" fill="${colors.shoes}"/>
+      <path d="M71,140 L79,146 L76,176 L68,176 Z M121,146 L129,140 L139,157 L132,162 Z" fill="${colors.skin}"/>
+    </g>`;
+  }
+
+  let ink = '';
+  // Construction lines: the very first marks an artist makes
+  if (tier === 0) {
+    const g = { color: st.ink, op: 0.16 + 0.06 * within, w: 0.8, passes: 1, j: 1.5 };
+    ink += strokes(circlePts(100, 88, 23, 25, 14, 0.4), r, g);
+    ink += strokes([[100, 60], [100, 120], [100, 180], [100, 266]], r, g);
+    ink += strokes([[80, 120], [120, 119]], r, g) + strokes([[84, 180], [116, 179]], r, g);
+  }
+  // Head, ears, hair
+  ink += L(circlePts(100, 88, 21, 23, 16, -1.3));
+  ink += L([[79, 84], [76, 88], [77, 95], [80, 97]], { w: st.w * 0.85, passes: 2 });
+  ink += L([[121, 84], [124, 88], [123, 95], [120, 97]], { w: st.w * 0.85, passes: 2 });
+  ink += L([[79, 84], [80, 70], [90, 62], [100, 59], [111, 62], [119, 70], [121, 84]], { w: st.w * 0.9 });
+  ink += L([[86, 74], [90, 66]], { passes: 1, w: st.w * 0.8 }) + L([[95, 72], [98, 63]], { passes: 1, w: st.w * 0.8 }) + L([[104, 72], [106, 62]], { passes: 1, w: st.w * 0.8 }) + L([[112, 74], [113, 66]], { passes: 1, w: st.w * 0.8 });
+  // Neck + t-shirt (round collar, short sleeves)
+  ink += L([[96, 110], [96, 117]], { passes: 2 }) + L([[104, 110], [104, 117]], { passes: 2 });
+  ink += L([[93, 116], [100, 121], [107, 116]], { passes: 2, w: st.w * 0.9 });
+  ink += L([[93, 116], [86, 119], [73, 137], [80, 144], [85, 138], [85, 180], [115, 180], [115, 138], [120, 144], [127, 137], [114, 119], [107, 116]]);
+  // Arms: left hangs down, right reaches up to the balloon string
+  ink += L([[74, 140], [70, 160], [69, 175]], { w: st.w * 0.95 }) + L([[79, 145], [76, 161], [76, 175]], { w: st.w * 0.95 });
+  ink += strokes(circlePts(72.5, 179, 4.2, 4.6, 9), r, { passes: 2, j: 0.8, color: st.ink, op: st.op, w: st.w * 0.9 });
+  ink += L([[121, 145], [128, 154], [132, 161]], { w: st.w * 0.95 }) + L([[126, 139], [133, 149], [137, 157]], { w: st.w * 0.95 });
+  ink += strokes(circlePts(136, 161, 4.2, 4.6, 9), r, { passes: 2, j: 0.8, color: st.ink, op: st.op, w: st.w * 0.9 });
+  // Trousers: waistband, two straight legs, little cuffs
+  ink += L([[85, 178], [86, 220], [86, 256], [97, 256], [100, 199], [103, 256], [114, 256], [114, 220], [115, 178]]);
+  ink += L([[85, 184], [115, 184]], { passes: 1, w: st.w * 0.7 });
+  // Shoes
+  ink += L([[86, 257], [80, 260], [80, 265], [92, 265], [98, 262], [97, 257]], { w: st.w * 0.9 });
+  ink += L([[103, 257], [102, 262], [108, 265], [120, 265], [120, 260], [114, 257]], { w: st.w * 0.9 });
+  // Shading: light hatching on the shirt and the trousers' shadow side
+  if (tier >= 1) {
+    const hop = tier === 1 ? 0.26 : 0.14;
+    ink += `<clipPath id="nsh${tier}"><path d="${shirtD}"/></clipPath><g clip-path="url(#nsh${tier})">${hatch(70, 140, 130, 180, rng('h1'), { gap: tier === 1 ? 6 : 8, op: hop, color: st.ink, w: 0.8 })}</g>`;
+    ink += `<clipPath id="npa${tier}"><path d="M100,190 L114,180 L114,256 L103,256 Z"/></clipPath><g clip-path="url(#npa${tier})">${hatch(98, 180, 116, 256, rng('h2'), { gap: 5, op: hop, color: st.ink, w: 0.8 })}</g>`;
+  }
+  // Face: none at first — he only gets a face once he starts to remember himself
+  if (tier >= 1) {
+    const fo = tier === 1 ? 0.55 + 0.3 * within : 0.9;
+    ink += `<g opacity="${fo.toFixed(2)}"><ellipse cx="92.5" cy="91" rx="1.9" ry="2.3" fill="${st.ink}"/><ellipse cx="107.5" cy="91" rx="1.9" ry="2.3" fill="${st.ink}"/>`;
+    ink += strokes([[95, 101], [100, 103.5], [105, 101]], r, { passes: 1, j: 0.4, color: st.ink, w: 1.3 });
+    if (tier >= 2) ink += strokes([[89, 85], [95, 84]], r, { passes: 1, j: 0.4, color: st.ink, w: 1, op: 0.6 }) + strokes([[105, 84], [111, 85]], r, { passes: 1, j: 0.4, color: st.ink, w: 1, op: 0.6 });
+    ink += '</g>';
+  }
+  if (tier >= 3) ink += `<circle cx="88" cy="99" r="4" fill="#e89a8a" opacity=".3"/><circle cx="112" cy="99" r="4" fill="#e89a8a" opacity=".3"/>`;
+
+  // Balloon: pale and faint → crimson → glowing ruby with drifting motes
   const br = rng('balloon');
+  const bFill = ['#ecc5c3', '#c94a3e', '#d63a2f', '#e2343a'][tier];
+  const bOp = [0.22 + 0.2 * within, 0.75, 0.88, 1][tier];
   let balloon = '';
-  if (tier >= 3) balloon += `<circle cx="150" cy="40" r="60" fill="url(#balloonGlow)"/>`;
-  balloon += `<path d="${sketchPath(circlePts(150, 40, 22, 27, 20), br, 1)}" fill="${balloonFill}" opacity="${balloonOp}" ${tier >= 2 ? 'filter="url(#glow)"' : ''}/>`;
-  balloon += strokes(circlePts(150, 40, 22, 27, 20), br, { passes: 2, j: 1.2, color: tier === 0 ? '#a55' : '#7a1f1f', op: tier === 0 ? 0.5 : 0.85, w: 1.8 });
-  balloon += `<path d="M141,28 q4,-8 10,-9" stroke="#fff" stroke-width="3" opacity="${tier ? 0.55 : 0.25}" fill="none" stroke-linecap="round"/>`;
-  balloon += `<path d="M150,67 l-3,5 l6,0 z" fill="${balloonFill}" opacity="${balloonOp}"/>`;
-  balloon += strokes([[150, 70], [146, 95], [152, 120], [136, 150]], br, { passes: 1, j: 2, color: ink, op: lineOp * 0.8, w: 1.1, dash });
+  if (tier >= 3) balloon += `<circle cx="150" cy="38" r="58" fill="url(#balloonGlow)"/>`;
+  balloon += `<path d="${sketchPath(circlePts(150, 38, 21, 26, 20), br, 1)}" fill="${bFill}" opacity="${bOp.toFixed(2)}" ${tier >= 2 ? 'filter="url(#wash)"' : ''}/>`;
+  balloon += strokes(circlePts(150, 38, 21, 26, 20), br, { passes: 2, j: 1.2, color: tier === 0 ? '#b98a86' : '#7a2a22', op: tier === 0 ? 0.45 : 0.8, w: 1.4 });
+  balloon += `<path d="M142,27 q4,-8 10,-9" stroke="#fff" stroke-width="3" opacity="${tier ? 0.5 : 0.25}" fill="none" stroke-linecap="round"/>`;
+  balloon += `<path d="M150,64 l-3,5 l6,0 z" fill="${bFill}" opacity="${bOp.toFixed(2)}"/>`;
+  balloon += strokes([[150, 68], [146, 95], [150, 125], [137, 158]], br, { passes: 1, j: 1.6, color: st.ink, op: st.op * 0.8, w: 1 });
   if (tier >= 2) for (let i = 0; i < 6 + tier * 3; i++) {
     const a = br() * Math.PI * 2, d = 30 + br() * 30;
-    balloon += `<circle class="mote" style="animation-delay:${(br() * 3).toFixed(2)}s" cx="${(150 + Math.cos(a) * d).toFixed(1)}" cy="${(40 + Math.sin(a) * d).toFixed(1)}" r="${(1 + br() * 1.8).toFixed(1)}" fill="#ffb3a7" opacity=".8"/>`;
+    balloon += `<circle class="mote" style="animation-delay:${(br() * 3).toFixed(2)}s" cx="${(150 + Math.cos(a) * d).toFixed(1)}" cy="${(38 + Math.sin(a) * d).toFixed(1)}" r="${(1 + br() * 1.8).toFixed(1)}" fill="#ffb3a7" opacity=".8"/>`;
   }
 
-  const head = circlePts(100, 95, 27, 29, 18, -1.2);
-  const tunicPts = [[80, 128], [120, 128], [131, 200], [69, 200]];
-  const tunicD = 'M80,128 L120,128 L131,200 L69,200 Z';
-  const headD = sketchPath(circlePts(100, 95, 27, 29, 18, 0, 1), rng('hd'), 0.6, true);
-
-  let body = '';
-  // Paint layers (tier 3+ = filled in)
-  body += paint('M86,200 L96,200 L94,262 L84,262 Z M104,200 L114,200 L117,262 L107,262 Z', pants);
-  body += paint(tunicD, tunic);
-  body += paint(headD, skin);
-  body += paint('M74,90 Q76,62 100,64 Q126,62 127,90 Q120,74 108,78 Q98,70 88,80 Q80,78 74,90 Z', hair);
-  body += paint('M80,262 L96,262 L96,270 L78,270 Z M106,262 L121,262 L123,270 L106,270 Z', shoe);
-  // Ink
-  body += L(head, { closed: false });
-  body += L([[74, 90], [76, 66], [100, 63], [125, 66], [127, 90]], { w: 1.8 });                      // hair line
-  body += L([[88, 79], [95, 70], [101, 78], [108, 70], [114, 79]], { w: 1.3 });                      // fringe
-  body += L([[94, 124], [94, 130]], { w: 1.6 });                                                      // neck
-  body += L([[106, 124], [106, 130]], { w: 1.6 });
-  body += L([...tunicPts, tunicPts[0]]);
-  body += L([[91, 200], [89, 262], [80, 264], [96, 266]]);                                            // legs
-  body += L([[109, 200], [112, 262], [122, 264], [106, 266]]);
-  body += L([[81, 134], [66, 168], [70, 182]]);                                                       // left arm
-  body += L([[119, 134], [130, 146], [136, 150]]);                                                    // right arm holding string
-  body += strokes(circlePts(137, 151, 4, 4, 8), r, { passes: 1, color: ink, op: lineOp, w: 1.6 });
-  if (tier >= 1) {
-    body += `<clipPath id="tun${tier}"><path d="${tunicD}"/></clipPath><g clip-path="url(#tun${tier})">${hatch(60, 128, 135, 200, rng('h1'), { gap: tier === 1 ? 7 : 10, op: tier === 1 ? 0.35 : 0.18, color: ink })}</g>`; // tunic shading
-    // Eyes and a small sad-hopeful mouth: he only gets a face once he remembers himself.
-    body += `<circle cx="91" cy="98" r="2.6" fill="${ink}"/><circle cx="109" cy="98" r="2.6" fill="${ink}"/>`;
-    body += L([[94, 111], [100, 113], [106, 111]], { w: 1.4, passes: 1 });
-  }
-  if (tier >= 3) body += `<circle cx="86" cy="106" r="4" fill="#e89a8a" opacity=".35"/><circle cx="114" cy="106" r="4" fill="#e89a8a" opacity=".35"/>`;
-
-  const ghost = tier === 0 ? `<ellipse cx="100" cy="160" rx="60" ry="110" fill="#cfd8ff" opacity="${0.12 + within * 0.08}" filter="url(#ghost)"/>` : '';
-  const shadow = `<ellipse cx="100" cy="272" rx="${tier ? 34 : 24}" ry="6" fill="#2c2723" opacity="${[0.06, 0.12, 0.16, 0.2][tier]}"/>`;
-
-  return `<svg class="noah ${walking ? 'walking' : ''} tier-${tier}" viewBox="0 -30 200 310" width="${size}" height="${size * 1.55}" aria-label="Noah">
-    ${ghost}${shadow}
+  const aura = tier === 0 ? `<ellipse cx="100" cy="165" rx="52" ry="108" fill="url(#noahAura)"/>` : '';
+  const shadow = `<ellipse cx="100" cy="268" rx="${tier ? 30 : 22}" ry="5" fill="#2c2723" opacity="${[0.05, 0.1, 0.14, 0.18][tier]}"/>`;
+  return `<svg class="noah ${walking ? 'walking' : ''} tier-${tier}" viewBox="0 -30 200 310" width="${size}" height="${size * 1.55}" role="img" aria-label="Noah">
+    ${aura}${shadow}
     <g class="balloon">${balloon}</g>
-    <g class="body" ${tier === 0 ? 'filter="url(#pencil)"' : ''}>${body}</g>
+    <g class="body">${paint}<g filter="url(#soft)">${ink}</g></g>
   </svg>`;
 }
 
@@ -227,7 +268,17 @@ const BIOMES = {
   glacier:  { sky: ['#eaf2f6', '#d5e5ee'], ground: '#bcd2de', bush: '#7d97a6', tuft: '#93acbb' },
   summit:   { sky: ['#ece6f2', '#d8cde6'], ground: '#a99ab8', bush: '#6b5d80', tuft: '#857799' },
 };
-const ROW_GAP = 96, W = 560, PAD_B = 90, PAD_T = 150;
+const ROW_GAP = 104, W = 560, PAD_B = 104, PAD_T = 150;
+
+// What the party can tell about a path (used for the map and for phones)
+export function nodeLabel(n, { showCategory, showTier } = {}) {
+  if (n.type === 'mystery') return '? Mystery';
+  if (n.type === 'rest') return 'Campfire';
+  if (n.type === 'boss') return 'Boss';
+  const t = TOPICS[n.topic];
+  const kind = t?.kind === 'puzzle' ? 'Puzzle' : 'Question';
+  return [showCategory && t ? t.name : kind, showTier && n.tier ? `${'★'.repeat(n.tier)} ${TIERS[n.tier].name}` : ''].filter(Boolean).join(' · ');
+}
 export const mapHeight = (map) => PAD_B + PAD_T + (map.rows.length - 1) * ROW_GAP;
 export const nodeXY = (map, n) => [n.x * W, mapHeight(map) - PAD_B - n.row * ROW_GAP];
 
@@ -239,7 +290,7 @@ const ICONS = {
   boss:     (r) => strokes(circlePts(0, -2, 8, 10, 12), r, { passes: 2, w: 2, j: 1.2 }),
 };
 
-export function drawMap(map, { sightRows, showCategory, showTier, showPreview, selectable = [], seed = 'm' }) {
+export function drawMap(map, { sightRows, showCategory, showTier, selectable = [], seed = 'm' }) {
   const b = BIOMES[map.biome] || BIOMES.grass;
   const H = mapHeight(map);
   const r = rng(seed + map.index);
@@ -285,7 +336,7 @@ export function drawMap(map, { sightRows, showCategory, showTier, showPreview, s
   s += `<g class="paths">${paths}</g>`;
 
   // Start marker
-  s += `<g transform="translate(${W / 2},${H - 28})"><text text-anchor="middle" class="map-label">start</text></g>`;
+  s += `<g transform="translate(${W / 2},${H - 8})"><text text-anchor="middle" class="map-label">start</text></g>`;
 
   // Nodes
   let nodes = '';
@@ -294,18 +345,21 @@ export function drawMap(map, { sightRows, showCategory, showTier, showPreview, s
     const known = n.visited || n.row <= visibleUpTo || n.type === 'boss' && n.row <= visibleUpTo;
     const sel = selectable.some((k) => k.id === n.id);
     const nr = rng('n' + n.id);
-    const rad = n.type === 'boss' ? 24 : 17;
-    let g = `<g class="node ${n.type} ${n.visited ? 'visited' : ''} ${sel ? 'selectable' : ''}" data-id="${n.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" ${sel ? 'tabindex="0" role="button"' : ''}>`;
+    const rad = n.type === 'boss' ? 24 : 18;
+    const t = TOPICS[n.topic];
+    const icon = n.type === 'question' && t?.kind === 'puzzle' ? 'puzzle' : n.type;
+    const order = [...selectable].sort((a, b) => a.x - b.x);
+    const pos = sel && order.length > 1 ? (order.length === 2 ? ['Left', 'Right'] : ['Left', 'Middle', 'Right', 'Far right'])[order.findIndex((k) => k.id === n.id)] : '';
+    const label = (pos ? `${pos} path · ` : '') + nodeLabel(n, { showCategory, showTier });
+    let g = `<g class="node ${n.type} ${n.visited ? 'visited' : ''} ${sel ? 'selectable' : ''}" data-id="${n.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" ${sel ? `tabindex="0" role="button" aria-label="${label}"` : ''}>`;
     if (sel) g += `<circle class="halo" r="${rad + 9}"/>`;
     g += `<path d="${sketchPath(circlePts(0, 0, rad, rad, 14, 0, 1), nr, 1, true)}" class="node-fill"/>`;
     g += strokes(circlePts(0, 0, rad, rad, 14), nr, { passes: 2, j: 1.2, w: 2 });
     if (known) {
-      g += `<g class="icon">${(ICONS[n.type] || ICONS.question)(nr)}</g>`;
-      if (!n.visited && (n.type === 'question' || n.type === 'puzzle')) {
-        const label = [];
-        if (showCategory && n.topic) label.push(n.topic);
-        if (showTier && n.tier) label.push('★'.repeat(n.tier));
-        if (label.length) g += `<text class="node-label" y="${rad + 15}" text-anchor="middle">${label.join(' · ')}</text>`;
+      g += `<g class="icon">${(ICONS[icon] || ICONS.question)(nr)}</g>`;
+      if (!n.visited && n.type === 'question') {
+        if (showCategory && t) g += `<text class="node-label" y="${rad + 15}" text-anchor="middle">${t.short}</text>`;
+        if (showTier && n.tier) g += `<text class="node-stars" y="${rad + (showCategory ? 29 : 15)}" text-anchor="middle">${'★'.repeat(n.tier)}</text>`;
       }
       if (n.type === 'boss') g += `<text class="node-label boss-label" y="${-rad - 10}" text-anchor="middle">boss</text>`;
     }
@@ -341,8 +395,31 @@ export function drawMap(map, { sightRows, showCategory, showTier, showPreview, s
   s += `<g class="fog" pointer-events="none">${fog}</g>`;
 
   // Noah's token on the map
-  const tok = cur ? nodeXY(map, cur) : [W / 2, H - 50];
+  const tok = cur ? nodeXY(map, cur) : [W / 2, H - 30];
   s += `<g class="noah-token" transform="translate(${tok[0]},${tok[1] - 6})"><circle r="7" fill="#c0392b" opacity=".9"/><path d="M0,7 L0,22" stroke="#2c2723" stroke-width="1.4"/></g>`;
   s += '</svg>';
   return s;
+}
+
+// ── Question visuals (shape sequences, paint blobs, emoji) ────
+function blob(color, seed, label) {
+  const r = rng('blob' + seed + color);
+  const pts = Array.from({ length: 12 }, (_, i) => { const a = (i / 12) * Math.PI * 2, d = 30 + r() * 7; return [50 + Math.cos(a) * d, 50 + Math.sin(a) * d * 0.9]; });
+  const d = sketchPath(pts, r, 1.2, true);
+  const light = color.toLowerCase() === '#ffffff';
+  return `<svg class="blob" viewBox="0 0 100 100" role="img" aria-label="${label || 'color'}"><path d="${d}" fill="${color}" ${light ? '' : 'filter="url(#wash)"'}/>${strokes([...pts, pts[0]], r, { passes: 2, j: 1, color: '#2c2723', w: 1.6, op: 0.7 })}</svg>`;
+}
+export function drawVisual(v) {
+  if (!v) return '';
+  if (v.type === 'sequence') return `<div class="seq">${v.items.map((it, i) => drawShape(it, 'seq' + i)).join('')}<div class="qmark">?</div></div>`;
+  if (v.type === 'emoji') return `<div class="emoji-clue" aria-label="emoji clue">${v.text}</div>`;
+  if (v.type === 'mix') {
+    if (v.mode === 'wheel' || v.mode === 'target') return `<div class="seq mix">${blob(v.colors[0], 0)}${v.mode === 'wheel' ? '<div class="op">↔</div><div class="qmark">?</div>' : '<div class="op">=</div><div class="qmark">? + ?</div>'}</div>`;
+    const sep = v.mode === 'light' ? '<div class="op light">+ light</div>' : '<div class="op">+</div>';
+    return `<div class="seq mix">${blob(v.colors[0], 1)}${sep}${blob(v.colors[1], 2)}<div class="op">=</div><div class="qmark">?</div></div>`;
+  }
+  return '';
+}
+export function drawSwatch(color) {
+  return `<span class="swatch" style="background:${color}"></span>`;
 }

@@ -1,17 +1,15 @@
 // Branching node map: rows from the bottom (row 0) up to the boss.
-// Each row has 2–4 nodes; each node links to 1–3 nodes in the next row.
-import { MODES, MAPS, PUZZLE_CHANCE, REST_CHANCE, partyTierShift, statFx } from './config.js';
+// Rows alternate 4 and 5 nodes (3 at the start) and every node links to the
+// 3 nearest nodes above, so nearly every step offers 3 paths to choose from.
+import { MODES, MAPS, REST_CHANCE, TOPICS, partyTierShift, statFx } from './config.js';
 
-const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
-export function rollTier(mode, partyMult, mapIndex, progress /* 0..1 through map */, extraShift = 0) {
-  const w = MODES[mode].tierWeights;
-  const total = w.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total, base = 1;
-  for (let i = 0; i < 4; i++) { if (r < w[i]) { base = i + 1; break; } r -= w[i]; }
-  const shift = partyTierShift(partyMult) + MAPS[mapIndex].tierBump + progress * 0.4 + extraShift;
-  const t = base + shift;
+// Typical difficulty: the map's base tier + mode + party size + a slight climb
+// through the map, plus a little randomness.
+export function rollTier(mode, partyMult, mapIndex, progress = 0, extra = 0) {
+  const mean = MAPS[mapIndex].avgTier + MODES[mode].tierOffset + partyTierShift(partyMult) + progress * 0.3 + extra;
+  const t = mean + (Math.random() - 0.5) * 0.9;
   const whole = Math.floor(t), frac = t - whole;
   return Math.max(1, Math.min(4, whole + (Math.random() < frac ? 1 : 0)));
 }
@@ -21,45 +19,57 @@ export function generateMap(mapIndex, ctx) {
   const def = MAPS[mapIndex];
   const rows = [];
   const mysteryChance = statFx.mysteryChance(agility);
+  let topicBag = [];
+  const nextTopic = (avoid) => {
+    if (!topicBag.length) topicBag = shuffle(topics);
+    let i = topicBag.findIndex((t) => !avoid.has(t));
+    if (i < 0) i = 0;
+    return topicBag.splice(i, 1)[0];
+  };
 
   for (let r = 0; r < def.rows; r++) {
-    const count = r === 0 ? rnd(2, 3) : rnd(2, 4);
+    const count = r === 0 ? 3 : r % 2 ? 4 : 5;
+    const spacing = { 3: 0.27, 4: 0.22, 5: 0.185 }[count];
     const row = [];
+    const used = new Set();
     for (let c = 0; c < count; c++) {
-      const x = count === 1 ? 0.5 : 0.16 + (0.68 * c) / (count - 1) + (Math.random() - 0.5) * 0.06;
+      const x = 0.5 + (c - (count - 1) / 2) * spacing + (Math.random() - 0.5) * 0.03;
       let type = 'question';
       const roll = Math.random();
       if (r > 0 && roll < mysteryChance) type = 'mystery';
-      else if (roll < mysteryChance + PUZZLE_CHANCE) type = 'puzzle';
-      else if (r > 3 && r < def.rows - 1 && roll < mysteryChance + PUZZLE_CHANCE + REST_CHANCE) type = 'rest';
+      else if (r > 2 && r < def.rows - 1 && roll < mysteryChance + REST_CHANCE) type = 'rest';
       const node = { id: `${r}-${c}`, row: r, col: c, x, type, next: [], visited: false };
-      if (type === 'question' || type === 'puzzle') {
+      if (type === 'question') {
+        node.topic = nextTopic(used);
+        used.add(node.topic);
         node.tier = rollTier(mode, partyMult, mapIndex, r / def.rows);
-        node.topic = type === 'puzzle' ? 'Puzzle' : pick(topics);
       }
       row.push(node);
     }
     rows.push(row);
   }
-  // Boss at the top
   rows.push([{ id: `${def.rows}-0`, row: def.rows, col: 0, x: 0.5, type: 'boss', next: [], visited: false }]);
 
-  // Connect rows: each node links to the nearest 1–2 nodes above; then make sure every node above is reachable.
   for (let r = 0; r < rows.length - 1; r++) {
-    const cur = rows[r], up = rows[r + 1];
-    for (const n of cur) {
-      const sorted = [...up].sort((a, b) => Math.abs(a.x - n.x) - Math.abs(b.x - n.x));
-      n.next.push(sorted[0].id);
-      if (sorted[1] && Math.random() < 0.55 && Math.abs(sorted[1].x - n.x) < 0.45) n.next.push(sorted[1].id);
+    const up = rows[r + 1];
+    for (const n of rows[r]) {
+      n.next = [...up].sort((a, b) => Math.abs(a.x - n.x) - Math.abs(b.x - n.x)).slice(0, 3).sort((a, b) => a.x - b.x).map((u) => u.id);
     }
-    for (const u of up) {
-      if (!cur.some((n) => n.next.includes(u.id))) {
-        const nearest = [...cur].sort((a, b) => Math.abs(a.x - u.x) - Math.abs(b.x - u.x))[0];
-        nearest.next.push(u.id);
+    // Make sure two choices from one node never share a topic, when we can help it
+    for (const n of rows[r]) {
+      const seenT = new Set();
+      for (const id of n.next) {
+        const u = up.find((k) => k.id === id);
+        if (u.topic && seenT.has(u.topic) && topics.length > 3) {
+          const rowTopics = new Set(up.map((k) => k.topic));
+          const alt = shuffle(topics).find((t) => !rowTopics.has(t) && !seenT.has(t));
+          if (alt) u.topic = alt;
+        }
+        if (u.topic) seenT.add(u.topic);
       }
     }
   }
-  return { index: mapIndex, name: def.name, biome: def.biome, rows, current: null /* node id; null = at the start */ };
+  return { index: mapIndex, name: def.name, biome: def.biome, rows, current: null };
 }
 
 export function findNode(map, id) {
@@ -67,9 +77,10 @@ export function findNode(map, id) {
   return null;
 }
 
-// Which nodes can the party move to now?
 export function choices(map) {
   if (!map.current) return map.rows[0];
   const cur = findNode(map, map.current);
   return cur.next.map((id) => findNode(map, id));
 }
+
+export const isPuzzleTopic = (id) => TOPICS[id]?.kind === 'puzzle';
