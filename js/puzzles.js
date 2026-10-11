@@ -1,5 +1,6 @@
 // Brain-teaser topics. Each generator makes endless questions at a given tier
 // (1 easy → 4 master). Answers are strings, {shape} or {text, swatch}.
+import { topicMaxTier } from './config.js';
 
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -100,6 +101,11 @@ const SPELL = [
   [4, 'supersede', ['supercede', 'superseed', 'superceed']], [4, 'idiosyncrasy', ['idiosyncracy', 'idiosyncrasie', 'ideosyncrasy']], [4, 'sacrilegious', ['sacreligious', 'sacrilegous', 'sacriligious']],
   [4, 'handkerchief', ['handkercheif', 'hankerchief', 'handkerchif']], [4, 'dumbbell', ['dumbell', 'dumbel', 'dumbbel']],
 ];
+// Spelling, Quick Math and Emoji were too easy to be hard questions, so they are
+// reclassified to just two levels: what used to be levels 1-2 is now level 1,
+// and what used to be levels 3-4 is now level 2.
+const squash = (t) => (t <= 2 ? 1 : 2);
+for (const e of SPELL) e[0] = squash(e[0]);
 function spelling(tier) {
   if (tier <= 2 && Math.random() < 0.3) {   // "which one is spelled wrong?"
     const pool = near(SPELL, tier);
@@ -117,8 +123,8 @@ function spelling(tier) {
 
 // ══ Quick math ═════════════════════════════════════════════════
 function math(tier) {
-  const t = Math.max(1, Math.min(4, tier));
-  const make = {
+  const t = Math.max(1, Math.min(2, tier));
+  const levels = {
     1: () => pick([
       () => { const a = rnd(3, 20), b = rnd(2, 15); return [`${a} + ${b} = ?`, a + b, `Add ${b} to ${a}.`]; },
       () => { const a = rnd(10, 30), b = rnd(2, 9); return [`${a} − ${b} = ?`, a - b, `Count back ${b} from ${a}.`]; },
@@ -148,8 +154,9 @@ function math(tier) {
       () => { const s = pick([12, 13, 14, 15, 16, 18, 21, 25]); return [`What is the square root of ${s * s}?`, s, `What number times itself is ${s * s}?`]; },
       () => { const v = [rnd(2, 10), rnd(2, 10), rnd(2, 10)]; const sum = v[0] + v[1] + v[2]; const d = 4 - (sum % 4 || 4); const last = sum % 4 === 0 ? 4 : 4 + d; const all = [...v, last]; return [`What is the average of ${all.join(', ')}?`, all.reduce((a, b) => a + b) / 4, 'Add them up, divide by 4.']; },
     ])(),
-  }[t];
-  const [prompt, ans, h] = make();
+  };
+  // Level 1 = the old levels 1-2, level 2 = the old levels 3-4
+  const [prompt, ans, h] = pick(t === 1 ? [levels[1], levels[2]] : [levels[3], levels[4]])();
   const q = mk('math', { subtopic: 'Quick Math', tier: t, prompt, hints: [h, `The answer is ${ans % 2 === 0 ? 'even' : 'odd'}.`, `It's between ${Math.max(0, Math.floor(ans - 3))} and ${Math.ceil(ans + 3)}.`] });
   if (!Number.isInteger(ans)) return opts(q, fmt(ans), [fmt(ans + 1), fmt(ans - 2), fmt(ans + 4.5)]);
   return numOpts(q, ans, Math.max(3, Math.round(ans * 0.1)));
@@ -389,6 +396,7 @@ const EMOJI = [
   [4, '🐴🛒', 'Putting the cart before the horse', ['Hold your horses', 'A dark horse', 'Horse sense'], 'saying'], [4, '🍎👁️', 'The apple of my eye', ['A bad apple', 'The Big Apple', 'An apple a day'], 'saying'],
   [4, '🐦🐦🪨', 'Two birds, one stone', ['The early bird gets the worm', 'A bird in the hand', 'Birds of a feather'], 'saying'],
 ];
+for (const e of EMOJI) e[0] = squash(e[0]);
 const EMOJI_PROMPT = { word: 'What word do these emoji make?', movie: 'Which movie is this?', saying: 'Which saying is this?' };
 function emoji(tier) {
   const [t, e, right, wrongs, kind] = pick(near(EMOJI, tier));
@@ -403,7 +411,7 @@ export const GEN_TOPICS = Object.keys(GENERATORS);
 
 export function generate(topic, tier, avoidIds = new Set()) {
   const g = GENERATORS[topic] || patterns;
-  tier = Math.max(1, Math.min(4, Math.round(tier)));
+  tier = Math.max(1, Math.min(topicMaxTier(topic), Math.round(tier)));
   let q;
   for (let i = 0; i < 6; i++) { q = g(tier); if (!avoidIds.has(q.id)) break; }
   return q;

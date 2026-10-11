@@ -9,14 +9,24 @@ export const ID_PREFIX = 'noah-way-home-';
 const COLORS = ['#c0392b', '#2f6db3', '#3f8a4a', '#b88a2c', '#7b4aa0', '#d2691e', '#1f8a8a', '#a0466e', '#5d6d7e', '#8a6d3b'];
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // no I or O (they look like 1 and 0)
 
+// STUN finds each device's address. Several independent STUN servers are listed
+// so one being slow or blocked (some Android networks) doesn't stall the join.
+// TURN is the relay fallback for networks where devices can't reach each other
+// directly. The free Open Relay server is best-effort; for a rock-solid setup
+// pass your own with ?turn=turn:host:3478,user,password (remembered on this device).
+function turnServers() {
+  const out = [];
+  let spec = new URLSearchParams(location.search).get('turn');
+  try { if (spec) localStorage.setItem('noah_turn', spec); else spec = localStorage.getItem('noah_turn'); } catch {}
+  if (spec) { const [url, username, credential] = spec.split(','); if (url) out.push({ urls: url, username, credential }); }
+  out.push({ urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' });
+  return out;
+}
 export function peerOptions() {
   const p = new URLSearchParams(location.search).get('peer');
-  // STUN finds each device's address; the free Open Relay TURN server is a
-  // best-effort fallback for networks where devices can't reach each other directly
-  // (e.g. a phone on mobile data, or Wi-Fi that isolates devices).
   const base = { debug: 0, config: { iceServers: [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+    ...turnServers(),
   ] } };
   if (!p) return base;
   const [host, port] = p.split(':');
@@ -91,6 +101,7 @@ export class Room {
       });
       peer.on('disconnected', () => { if (!peer.destroyed) setTimeout(() => peer.reconnect(), 1500); });
       peer.on('connection', (conn) => this.accept(conn));
+      peer.on('error', (err) => { if (opened) console.warn('[room]', err.type, err.message); });
     });
   }
 
@@ -115,7 +126,8 @@ export class Room {
       if (!p) return;
       if (m.t === 'vote') this.h.onVote?.(p, m);
       else if (m.t === 'action') this.h.onAction?.(p, m);
-      else if (m.t === 'useMine') this.h.onUseMine?.(p);
+      else if (m.t === 'team') this.h.onTeam?.(p, m);
+      else if (m.t === 'squad') this.h.onSquad?.(p, m);
     });
     conn.on('close', () => {
       const p = conn.player;

@@ -18,6 +18,8 @@ export const Settings = {
 let ctx = null, master = null, sfxBus = null, musicBus = null, verb = null;
 let musicOn = false, musicTimer = null, musicStart = 0, nextBeat = 0;
 let wantMusic = false;   // the host page asks for music; phones only use sfx
+let bossOn = false;      // boss fights: darker sound effects, and a low drone instead of the piano theme
+let droneBus = null, droneLP = null, droneNodes = null;
 
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -40,6 +42,8 @@ function ensure() {
   verb.connect(wet).connect(master);
   sfxBus = ctx.createGain(); sfxBus.connect(master); sfxBus.connect(verb);
   musicBus = ctx.createGain(); musicBus.gain.value = 0; musicBus.connect(master); musicBus.connect(verb);
+  droneBus = ctx.createGain(); droneBus.gain.value = 0; droneBus.connect(master); droneBus.connect(verb);
+  droneLP = ctx.createBiquadFilter(); droneLP.type = 'lowpass'; droneLP.frequency.value = 180; droneLP.Q.value = 0.7; droneLP.connect(droneBus);
   apply();
   return ctx;
 }
@@ -49,7 +53,8 @@ function apply() {
   const s = Settings.get();
   master.gain.setTargetAtTime(Math.max(0, Math.min(1, s.volume)), ctx.currentTime, 0.05);
   sfxBus.gain.setTargetAtTime(s.sfx ? 0.9 : 0, ctx.currentTime, 0.05);
-  if (wantMusic && s.music) startMusic(); else stopMusic();
+  if (wantMusic && s.music) { if (bossOn) { stopMusic(); startDrone(); } else { stopDrone(); startMusic(); } }
+  else { stopMusic(); stopDrone(); }
 }
 
 // A soft felt-piano-ish note: a few sine partials, fast attack, long decay, low-passed.
@@ -122,6 +127,52 @@ function stopMusic() {
   musicBus.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.2);
 }
 
+// ── Boss fights ───────────────────────────────────────────────
+// A low, slowly trembling drone replaces the piano theme.
+function startDrone() {
+  if (droneNodes || !ctx) return;
+  const t = ctx.currentTime;
+  droneBus.gain.cancelScheduledValues(t);
+  droneBus.gain.setValueAtTime(droneBus.gain.value, t);
+  droneBus.gain.linearRampToValueAtTime(0.5, t + 2.5);
+  const mk = (type, f, g, det = 0) => { const o = ctx.createOscillator(), og = ctx.createGain(); o.type = type; o.frequency.value = f; o.detune.value = det; og.gain.value = g; o.connect(og).connect(droneLP); o.start(t); return o; };
+  const lfo = ctx.createOscillator(), lg = ctx.createGain();
+  lfo.frequency.value = 0.18; lg.gain.value = 60; lfo.connect(lg).connect(droneLP.frequency); lfo.start(t);
+  droneNodes = [mk('sawtooth', 55, 0.22), mk('sawtooth', 55.4, 0.18, 6), mk('sine', 27.5, 0.4), mk('triangle', 82.4, 0.12), lfo];
+}
+function stopDrone() {
+  if (!droneNodes || !ctx) return;
+  const nodes = droneNodes; droneNodes = null;
+  const t = ctx.currentTime;
+  droneBus.gain.cancelScheduledValues(t);
+  droneBus.gain.setValueAtTime(droneBus.gain.value, t);
+  droneBus.gain.linearRampToValueAtTime(0, t + 1.2);
+  setTimeout(() => nodes.forEach((o) => { try { o.stop(); } catch {} }), 1500);
+}
+// Heavy, dark versions of the sound effects
+function thud(t, f0 = 150, f1 = 48, vel = 0.35, dur = 0.5) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.6);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(sfxBus); o.start(t); o.stop(t + dur + 0.05);
+}
+function brass(note, t, { vel = 0.1, dur = 1.2, bright = 1100 } = {}) {
+  const f = midi(note), out = ctx.createGain(), lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.Q.value = 2;
+  lp.frequency.setValueAtTime(220, t); lp.frequency.exponentialRampToValueAtTime(bright, t + 0.12); lp.frequency.exponentialRampToValueAtTime(260, t + dur);
+  out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(vel, t + 0.05); out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  out.connect(lp).connect(sfxBus);
+  for (const det of [-7, 7]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det; o.connect(out); o.start(t); o.stop(t + dur + 0.05); }
+}
+function ring(freq, t, { vel = 0.05, dur = 2.2 } = {}) {   // a cold, metallic ring
+  for (const [m, g] of [[1, 1], [2.76, 0.5], [5.4, 0.25]]) {
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = freq * m;
+    og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(vel * g, t + 0.01); og.gain.exponentialRampToValueAtTime(0.0001, t + dur / m);
+    o.connect(og).connect(sfxBus); o.start(t); o.stop(t + dur + 0.05);
+  }
+}
+
 function sfx(fn) {
   const s = Settings.get();
   if (!s.sfx || !ensure()) return;
@@ -138,8 +189,11 @@ export const Sound = {
     if (ctx.state === 'suspended') ctx.resume();
     apply();
   },
-  // A soft wooden "tock" for menu taps
+  // Boss fights use darker, heavier sounds (the page calls this when a boss appears or ends)
+  setBoss(on) { on = !!on; if (on === bossOn) return; bossOn = on; if (ctx) apply(); },
+  // A soft wooden "tock" for menu taps (a low thud during boss fights)
   click() {
+    if (bossOn) return sfx((t) => thud(t, 230, 90, 0.17, 0.18));
     sfx((t) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = 'sine';
@@ -148,13 +202,21 @@ export const Sound = {
       o.connect(g).connect(sfxBus); o.start(t); o.stop(t + 0.14);
     });
   },
-  good() { sfx((t) => { piano(76, t, { vel: 0.22 }); piano(79, t + 0.09, { vel: 0.22 }); piano(84, t + 0.18, { vel: 0.24, dur: 3 }); }); },
-  bad() { sfx((t) => { piano(57, t, { vel: 0.2, bright: 1200 }); piano(53, t + 0.16, { vel: 0.2, dur: 3, bright: 1100 }); }); },
-  levelUp() { sfx((t) => [72, 76, 79, 84, 88].forEach((n, i) => piano(n, t + i * 0.08, { vel: 0.18, dur: 3 }))); },
+  good() { if (bossOn) return sfx((t) => { thud(t, 150, 40, 0.5, 0.7); [45, 52, 57].forEach((n) => brass(n, t + 0.02, { vel: 0.09, dur: 1.1 })); ring(1318, t + 0.04, { vel: 0.04, dur: 1.4 }); }); sfx((t) => { piano(76, t, { vel: 0.22 }); piano(79, t + 0.09, { vel: 0.22 }); piano(84, t + 0.18, { vel: 0.24, dur: 3 }); }); },
+  bad() { if (bossOn) return sfx((t) => { thud(t, 110, 32, 0.6, 1.1); brass(33, t, { vel: 0.12, dur: 2.2, bright: 700 }); brass(34, t + 0.05, { vel: 0.1, dur: 2.2, bright: 700 }); ring(110, t, { vel: 0.05, dur: 2.8 }); }); sfx((t) => { piano(57, t, { vel: 0.2, bright: 1200 }); piano(53, t + 0.16, { vel: 0.2, dur: 3, bright: 1100 }); }); },
+  levelUp() { if (bossOn) return sfx((t) => [45, 48, 52, 57, 60].forEach((n, i) => brass(n, t + i * 0.1, { vel: 0.08, dur: 1.4 }))); sfx((t) => [72, 76, 79, 84, 88].forEach((n, i) => piano(n, t + i * 0.08, { vel: 0.18, dur: 3 }))); },
   page() { sfx((t) => piano(81, t, { vel: 0.08, dur: 1.2, bright: 2600 })); },
 };
 
 // Unlock audio on the first gesture (browser autoplay rules)
 for (const ev of ['pointerdown', 'keydown', 'touchend']) {
   document.addEventListener(ev, () => Sound.unlock(), { capture: true, passive: true });
+}
+
+// Boss fights flip the page from the light paper look to a dark one, and swap the sounds.
+export function setBossTheme(on) {
+  document.body.classList.toggle('boss-mode', !!on);
+  const m = document.querySelector('meta[name=theme-color]');
+  if (m) m.setAttribute('content', on ? '#17141c' : '#efe8da');
+  Sound.setBoss(!!on);
 }

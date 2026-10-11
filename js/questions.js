@@ -6,7 +6,7 @@
 //     marked Fix / Cut / unreviewed.
 //   • generated brain teasers (puzzles.js)
 import { REMOVED } from './removed.js';
-import { TOPICS, ALL_TOPIC_IDS } from './config.js';
+import { TOPICS, ALL_TOPIC_IDS, topicMaxTier } from './config.js';
 import { generate } from './puzzles.js';
 
 const API = 'https://opentdb.com/api.php';
@@ -234,6 +234,7 @@ export class QuestionSource {
   get(tier, topic, opts = {}) {
     tier = Math.max(1, Math.min(4, Math.round(tier)));
     if (!TOPICS[topic]) topic = pick(this.topics);
+    tier = Math.min(tier, topicMaxTier(topic));       // Math / Spelling / Emoji top out at level 2
     if (this.testMode) return this.testQuestion(tier, topic);
     const def = TOPICS[topic];
     // Brain teasers: generated fresh, mixed with any bank questions for that topic
