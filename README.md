@@ -19,6 +19,10 @@ A cooperative trivia adventure. Noah is a lost little boy, about six — at firs
 - **Topics screen:** an **All set — set off** button at the very top skips straight past the topic list. Open Trivia DB questions about exact years, release dates, episodes, album tracks etc. are filtered out automatically; landmark dates (1776, 1969, 2001…) come from the hand-written bank.
 - **Stats (SPECIAL + Luck)**, **skills** every 4 levels (Eliminate → 50/50 → Truth, Hint ladder, Second Guess, Ghostly Tether), `?` events, campfires, 8 biomes, auto-save, local leaderboard.
 
+## Question bank
+
+`js/bank.json` holds the reviewed questions (27,580 rows marked **Keep** in the review sheet; Fix, Cut and unreviewed rows are left out). The game always draws from it first. When a topic runs low (Sports, TV, Tech, Vehicles, Video Games, Books, Board games have ~50 each), Open Trivia DB tops it up online, skipping any question the sheet marked Fix / Cut / unreviewed. Brain teasers are still generated fresh.
+
 ## TV + phones
 
 1. Open the game on whatever drives the TV (laptop on HDMI, a cast Chrome tab, or a TV browser) and choose **Play on a TV with phones**.
@@ -44,7 +48,8 @@ css/style.css       paper-and-pencil look (scales up on TVs)
 js/config.js        all the numbers + topic list
 js/game.js          rules and run state
 js/map.js           branching map generator
-js/questions.js     Open Trivia DB (filtered) + hand-written bank + hints
+js/questions.js     question supply: reviewed bank first, Open Trivia DB top-up, hints
+js/bank.json        the question bank — only rows marked Keep in the review sheet
 js/puzzles.js       brain teasers: colors, spelling, math, patterns, shapes, riddles, word play, odd one out, emoji
 js/art.js           Noah, bosses, shapes, map — all drawn as sketchy SVG
 js/main.js          big-screen UI, keyboard/remote navigation
