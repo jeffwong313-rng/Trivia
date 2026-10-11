@@ -79,108 +79,178 @@ export function noahTier(level) {
 }
 
 // ── Noah ──────────────────────────────────────────────────────
-// A small boy in a t-shirt and trousers, holding a red balloon. He starts as
-// a faint pencil sketch — light construction lines you can barely make out —
-// and gets clearer, then softly painted, as the party levels up.
-export function drawNoah(level, { walking = false, size = 200 } = {}) {
+// A little boy, about six: big round head, short arms and legs, a striped
+// t-shirt, shorts and chunky sneakers, holding a red balloon on a long string.
+// He starts as a faint pencil sketch — light construction lines you can barely
+// make out — and gets clearer, then softly painted, as the party levels up.
+// pose: 'stand' (right hand up holding the balloon) or 'lying' (arms down).
+// bare: return only the figure's <g> (for composing into a bigger scene).
+export function drawNoah(level, { walking = false, size = 200, pose = 'stand', balloon: withBalloon = true, bare = false, strong = false } = {}) {
   const tier = noahTier(level);
   const from = NOAH_TIERS[tier].from, to = NOAH_TIERS[tier + 1]?.from ?? from + 4;
   const within = Math.max(0, Math.min(1, (level - from) / (to - from)));
-  const r = rng('noah-v2-' + tier);
+  const r = rng('noah-v3-' + tier + pose);
   const st = [
-    { ink: '#8a847c', op: 0.26 + 0.14 * within, passes: 3, j: 1.9, w: 1.15 },
-    { ink: '#625b53', op: 0.55 + 0.2 * within,  passes: 3, j: 1.3, w: 1.35 },
-    { ink: '#4d463f', op: 0.78,                  passes: 2, j: 1.0, w: 1.5 },
-    { ink: '#3d3631', op: 0.88,                  passes: 2, j: 0.8, w: 1.6 },
+    { ink: '#8a847c', op: 0.3 + 0.14 * within,  passes: 3, j: 1.4, w: 1.15 },
+    { ink: '#625b53', op: 0.58 + 0.2 * within,  passes: 3, j: 1.0, w: 1.3 },
+    { ink: '#4d463f', op: 0.8,                   passes: 2, j: 0.8, w: 1.45 },
+    { ink: '#3d3631', op: 0.9,                   passes: 2, j: 0.6, w: 1.55 },
   ][tier];
+  if (strong) { st.op = Math.max(st.op, 0.66); st.ink = '#57504a'; }
   const L = (pts, o = {}) => strokes(pts, r, { passes: st.passes, j: st.j, color: st.ink, op: st.op, w: st.w, ...o });
+  const up = pose !== 'lying';
 
-  // ── Shapes (viewBox 0 -30 200 310, feet on y≈268) ──
-  const headD = sketchPath(circlePts(100, 88, 21, 23, 18, 0, 1), rng('hd'), 0.5, true);
-  const hairD = 'M79,86 Q78,66 92,62 Q100,57 109,61 Q122,65 121,86 Q117,74 110,73 Q104,70 100,74 Q94,69 88,73 Q82,75 79,86 Z';
-  const shirtD = 'M86,119 L93,116 Q100,121 107,116 L114,119 L127,137 L120,144 L115,138 L115,180 L85,180 L85,138 L80,144 L73,137 Z';
-  const pantsD = 'M85,178 L115,178 L114,256 L103,256 L100,198 L97,256 L86,256 Z';
-  const shoesD = 'M84,256 L98,256 Q99,264 92,265 L80,265 Q79,259 84,256 Z M102,256 L116,256 Q121,259 120,265 L108,265 Q101,264 102,256 Z';
-  const colors = { skin: '#f0d5bf', hair: '#7a5638', shirt: '#93afcf', pants: '#7c6a58', shoes: '#4d423a' };
+  // ── Shapes (viewBox 0 -30 200 310, feet on y≈269). He is small: ~125 tall,
+  //    and a third of that is head, like a real six-year-old. ──
+  const headD = sketchPath(circlePts(100, 170, 26, 25, 20, 0, 1), rng('hd3'), 0.4, true);
+  const hairD = 'M74,171 Q71,147 89,141 Q100,135 112,140 Q129,146 126,171 Q122,158 113,157 Q107,151 100,158 Q93,151 86,158 Q78,160 74,171 Z';
+  const shirtD = 'M88,198 L94,196 Q100,200 106,196 L112,198 L123,210 L117,215 L115,212 L116,231 L84,231 L85,212 L83,215 L77,210 Z';
+  const shortsD = 'M84,229 L116,229 L117,247 L102,247 L100,238 L98,247 L83,247 Z';
+  const shoesD = 'M84,259 L97,259 Q99,268 92,269 L80,269 Q78,262 84,259 Z M103,259 L116,259 Q122,262 120,269 L108,269 Q101,268 103,259 Z';
+  const armL = 'M75,212 L83,215 L81,233 L73,233 Z';
+  const armR = up ? 'M118,213 L123,208 L137,189 L131,187 Z' : 'M117,215 L125,212 L127,233 L119,233 Z';
+  const legsD = 'M87,246 L96,246 L96,260 L87,260 Z M104,246 L113,246 L113,260 L104,260 Z';
+  const colors = { skin: '#f3d9c4', hair: '#8a6240', shirt: '#f2c55c', stripe: '#e07a5f', shorts: '#6f8fb8', shoes: '#c9573f' };
+  const handR = up ? [135, 188] : [123, 236];
 
   let paint = '';
   if (tier >= 2) {
-    const op = tier === 2 ? 0.38 + 0.25 * within : 0.82;
-    const off = tier === 2 ? 'translate(2.5,1.5)' : '';
+    const op = tier === 2 ? 0.4 + 0.25 * within : 0.85;
+    const off = tier === 2 ? 'translate(2,1.5)' : '';
     paint = `<g filter="url(#wash)" opacity="${op.toFixed(2)}" transform="${off}">
-      <path d="${pantsD}" fill="${colors.pants}"/><path d="${shirtD}" fill="${colors.shirt}"/>
+      <path d="${legsD}" fill="${colors.skin}"/><path d="${shortsD}" fill="${colors.shorts}"/><path d="${shirtD}" fill="${colors.shirt}"/>
+      <path d="M85,217 L115,217 L115,221 L85,221 Z M85,225 L116,225 L116,229 L85,229 Z" fill="${colors.stripe}" opacity=".7"/>
+      <path d="${armL}" fill="${colors.skin}"/><path d="${armR}" fill="${colors.skin}"/>
       <path d="${headD}" fill="${colors.skin}"/><path d="${hairD}" fill="${colors.hair}"/><path d="${shoesD}" fill="${colors.shoes}"/>
-      <path d="M71,140 L79,146 L76,176 L68,176 Z M121,146 L129,140 L139,157 L132,162 Z" fill="${colors.skin}"/>
     </g>`;
   }
 
   let ink = '';
   // Construction lines: the very first marks an artist makes
   if (tier === 0) {
-    const g = { color: st.ink, op: 0.16 + 0.06 * within, w: 0.8, passes: 1, j: 1.5 };
-    ink += strokes(circlePts(100, 88, 23, 25, 14, 0.4), r, g);
-    ink += strokes([[100, 60], [100, 120], [100, 180], [100, 266]], r, g);
-    ink += strokes([[80, 120], [120, 119]], r, g) + strokes([[84, 180], [116, 179]], r, g);
+    const g = { color: st.ink, op: 0.16 + 0.06 * within, w: 0.8, passes: 1, j: 1.2 };
+    ink += strokes(circlePts(100, 170, 28, 27, 14, 0.4), r, g);
+    ink += strokes([[100, 140], [100, 198], [100, 238], [100, 268]], r, g);
+    ink += strokes([[82, 200], [118, 199]], r, g) + strokes([[84, 231], [116, 230]], r, g);
   }
-  // Head, ears, hair
-  ink += L(circlePts(100, 88, 21, 23, 16, -1.3));
-  ink += L([[79, 84], [76, 88], [77, 95], [80, 97]], { w: st.w * 0.85, passes: 2 });
-  ink += L([[121, 84], [124, 88], [123, 95], [120, 97]], { w: st.w * 0.85, passes: 2 });
-  ink += L([[79, 84], [80, 70], [90, 62], [100, 59], [111, 62], [119, 70], [121, 84]], { w: st.w * 0.9 });
-  ink += L([[86, 74], [90, 66]], { passes: 1, w: st.w * 0.8 }) + L([[95, 72], [98, 63]], { passes: 1, w: st.w * 0.8 }) + L([[104, 72], [106, 62]], { passes: 1, w: st.w * 0.8 }) + L([[112, 74], [113, 66]], { passes: 1, w: st.w * 0.8 });
-  // Neck + t-shirt (round collar, short sleeves)
-  ink += L([[96, 110], [96, 117]], { passes: 2 }) + L([[104, 110], [104, 117]], { passes: 2 });
-  ink += L([[93, 116], [100, 121], [107, 116]], { passes: 2, w: st.w * 0.9 });
-  ink += L([[93, 116], [86, 119], [73, 137], [80, 144], [85, 138], [85, 180], [115, 180], [115, 138], [120, 144], [127, 137], [114, 119], [107, 116]]);
-  // Arms: left hangs down, right reaches up to the balloon string
-  ink += L([[74, 140], [70, 160], [69, 175]], { w: st.w * 0.95 }) + L([[79, 145], [76, 161], [76, 175]], { w: st.w * 0.95 });
-  ink += strokes(circlePts(72.5, 179, 4.2, 4.6, 9), r, { passes: 2, j: 0.8, color: st.ink, op: st.op, w: st.w * 0.9 });
-  ink += L([[121, 145], [128, 154], [132, 161]], { w: st.w * 0.95 }) + L([[126, 139], [133, 149], [137, 157]], { w: st.w * 0.95 });
-  ink += strokes(circlePts(136, 161, 4.2, 4.6, 9), r, { passes: 2, j: 0.8, color: st.ink, op: st.op, w: st.w * 0.9 });
-  // Trousers: waistband, two straight legs, little cuffs
-  ink += L([[85, 178], [86, 220], [86, 256], [97, 256], [100, 199], [103, 256], [114, 256], [114, 220], [115, 178]]);
-  ink += L([[85, 184], [115, 184]], { passes: 1, w: st.w * 0.7 });
-  // Shoes
-  ink += L([[86, 257], [80, 260], [80, 265], [92, 265], [98, 262], [97, 257]], { w: st.w * 0.9 });
-  ink += L([[103, 257], [102, 262], [108, 265], [120, 265], [120, 260], [114, 257]], { w: st.w * 0.9 });
-  // Shading: light hatching on the shirt and the trousers' shadow side
+  // Head (big and round), little ears, tousled hair with a cowlick
+  ink += L(circlePts(100, 170, 26, 25, 18, -1.3));
+  ink += L([[74, 165], [70, 169], [71, 176], [75, 178]], { w: st.w * 0.85, passes: 2 });
+  ink += L([[126, 165], [130, 169], [129, 176], [125, 178]], { w: st.w * 0.85, passes: 2 });
+  ink += L([[74, 168], [75, 153], [87, 142], [100, 138], [113, 142], [124, 152], [126, 168]], { w: st.w * 0.9 });
+  ink += L([[84, 158], [90, 150]], { passes: 1, w: st.w * 0.8 }) + L([[96, 156], [99, 147]], { passes: 1, w: st.w * 0.8 }) + L([[104, 156], [107, 147]], { passes: 1, w: st.w * 0.8 }) + L([[115, 158], [116, 150]], { passes: 1, w: st.w * 0.8 });
+  ink += L([[100, 139], [97, 131], [103, 128]], { passes: 2, w: st.w * 0.85 });   // cowlick
+  // Short neck + t-shirt (round collar, short puffy sleeves, two stripes)
+  ink += L([[97, 194], [97, 197]], { passes: 1 }) + L([[103, 194], [103, 197]], { passes: 1 });
+  ink += L([[94, 196], [100, 200], [106, 196]], { passes: 2, w: st.w * 0.9 });
+  ink += L([[94, 196], [88, 198], [77, 210], [83, 215], [85, 212], [84, 231], [116, 231], [115, 212], [117, 215], [123, 210], [112, 198], [106, 196]]);
+  if (tier >= 1) ink += L([[85, 219], [115, 219]], { passes: 1, w: st.w * 0.6, op: st.op * 0.7 }) + L([[85, 226], [116, 226]], { passes: 1, w: st.w * 0.6, op: st.op * 0.7 });
+  // Arms: left hangs down; right reaches up to the balloon string (or rests, lying down)
+  ink += L([[78, 213], [75, 224], [74, 231]], { w: st.w * 0.95 }) + L([[83, 215], [81, 225], [80, 231]], { w: st.w * 0.95 });
+  ink += strokes(circlePts(77, 235, 4, 4.2, 9), r, { passes: 2, j: 0.6, color: st.ink, op: st.op, w: st.w * 0.9 });
+  if (up) ink += L([[118, 214], [127, 203], [132, 193]], { w: st.w * 0.95 }) + L([[123, 209], [131, 199], [137, 191]], { w: st.w * 0.95 });
+  else ink += L([[122, 213], [125, 224], [126, 231]], { w: st.w * 0.95 }) + L([[117, 215], [119, 225], [120, 231]], { w: st.w * 0.95 });
+  ink += strokes(circlePts(handR[0], handR[1], 4, 4.2, 9), r, { passes: 2, j: 0.6, color: st.ink, op: st.op, w: st.w * 0.9 });
+  // Shorts, bare knees, chunky sneakers
+  ink += L([[84, 229], [83, 247], [98, 247], [100, 238], [102, 247], [117, 247], [116, 229]]);
+  ink += L([[87, 247], [87, 259]], { w: st.w * 0.9 }) + L([[96, 247], [96, 259]], { w: st.w * 0.9 });
+  ink += L([[104, 247], [104, 259]], { w: st.w * 0.9 }) + L([[113, 247], [113, 259]], { w: st.w * 0.9 });
+  ink += L([[85, 259], [79, 263], [80, 269], [92, 269], [98, 266], [97, 259]], { w: st.w * 0.9 });
+  ink += L([[103, 259], [102, 266], [108, 269], [120, 269], [121, 263], [115, 259]], { w: st.w * 0.9 });
+  // Shading: light hatching on the shirt and the shorts' shadow side
   if (tier >= 1) {
-    const hop = tier === 1 ? 0.26 : 0.14;
-    ink += `<clipPath id="nsh${tier}"><path d="${shirtD}"/></clipPath><g clip-path="url(#nsh${tier})">${hatch(70, 140, 130, 180, rng('h1'), { gap: tier === 1 ? 6 : 8, op: hop, color: st.ink, w: 0.8 })}</g>`;
-    ink += `<clipPath id="npa${tier}"><path d="M100,190 L114,180 L114,256 L103,256 Z"/></clipPath><g clip-path="url(#npa${tier})">${hatch(98, 180, 116, 256, rng('h2'), { gap: 5, op: hop, color: st.ink, w: 0.8 })}</g>`;
+    const hop = tier === 1 ? 0.22 : 0.12;
+    const id = `${tier}${pose}`;
+    ink += `<clipPath id="nsh${id}"><path d="${shirtD}"/></clipPath><g clip-path="url(#nsh${id})">${hatch(100, 200, 125, 232, rng('h1'), { gap: tier === 1 ? 5 : 7, op: hop, color: st.ink, w: 0.7 })}</g>`;
+    ink += `<clipPath id="npa${id}"><path d="M101,236 L116,229 L117,247 L102,247 Z"/></clipPath><g clip-path="url(#npa${id})">${hatch(100, 229, 118, 247, rng('h2'), { gap: 4, op: hop, color: st.ink, w: 0.7 })}</g>`;
   }
-  // Face: none at first — he only gets a face once he starts to remember himself
+  // Face: none at first — he only gets a face once he starts to remember himself.
+  // Big round eyes, a small smile, rosy cheeks once he's painted.
   if (tier >= 1) {
-    const fo = tier === 1 ? 0.55 + 0.3 * within : 0.9;
-    ink += `<g opacity="${fo.toFixed(2)}"><ellipse cx="92.5" cy="91" rx="1.9" ry="2.3" fill="${st.ink}"/><ellipse cx="107.5" cy="91" rx="1.9" ry="2.3" fill="${st.ink}"/>`;
-    ink += strokes([[95, 101], [100, 103.5], [105, 101]], r, { passes: 1, j: 0.4, color: st.ink, w: 1.3 });
-    if (tier >= 2) ink += strokes([[89, 85], [95, 84]], r, { passes: 1, j: 0.4, color: st.ink, w: 1, op: 0.6 }) + strokes([[105, 84], [111, 85]], r, { passes: 1, j: 0.4, color: st.ink, w: 1, op: 0.6 });
+    const fo = tier === 1 ? 0.55 + 0.3 * within : 0.92;
+    ink += `<g opacity="${fo.toFixed(2)}"><ellipse cx="90.5" cy="174" rx="2.8" ry="3.5" fill="${st.ink}"/><ellipse cx="109.5" cy="174" rx="2.8" ry="3.5" fill="${st.ink}"/>`;
+    if (tier >= 2) ink += '<circle cx="91.5" cy="172.6" r="1" fill="#fff"/><circle cx="110.5" cy="172.6" r="1" fill="#fff"/>';
+    ink += strokes([[96, 183], [100, 185.5], [104, 183]], r, { passes: 1, j: 0.3, color: st.ink, w: 1.3 });
+    if (tier >= 2) ink += strokes([[86, 166], [92, 165]], r, { passes: 1, j: 0.3, color: st.ink, w: 1, op: 0.55 }) + strokes([[108, 165], [114, 166]], r, { passes: 1, j: 0.3, color: st.ink, w: 1, op: 0.55 });
     ink += '</g>';
   }
-  if (tier >= 3) ink += `<circle cx="88" cy="99" r="4" fill="#e89a8a" opacity=".3"/><circle cx="112" cy="99" r="4" fill="#e89a8a" opacity=".3"/>`;
+  // Lying in the grass: faint closed, sleepy eyes even before he has a face
+  if (!up && tier === 0) ink += strokes([[87, 174.5], [90.5, 175.8], [94, 174.5]], r, { passes: 1, j: 0.3, color: st.ink, w: 1.1, op: 0.55 }) + strokes([[106, 174.5], [109.5, 175.8], [113, 174.5]], r, { passes: 1, j: 0.3, color: st.ink, w: 1.1, op: 0.55 });
+  if (tier >= 2) ink += `<circle cx="84" cy="181" r="4.5" fill="#e89a8a" opacity="${tier >= 3 ? 0.4 : 0.25}"/><circle cx="116" cy="181" r="4.5" fill="#e89a8a" opacity="${tier >= 3 ? 0.4 : 0.25}"/>`;
+
+  const figure = `<g class="body">${paint}<g filter="url(#soft)">${ink}</g></g>`;
+  if (bare) return figure;
 
   // Balloon: pale and faint → crimson → glowing ruby with drifting motes
-  const br = rng('balloon');
-  const bFill = ['#ecc5c3', '#c94a3e', '#d63a2f', '#e2343a'][tier];
-  const bOp = [0.22 + 0.2 * within, 0.75, 0.88, 1][tier];
   let balloon = '';
-  if (tier >= 3) balloon += `<circle cx="150" cy="38" r="58" fill="url(#balloonGlow)"/>`;
-  balloon += `<path d="${sketchPath(circlePts(150, 38, 21, 26, 20), br, 1)}" fill="${bFill}" opacity="${bOp.toFixed(2)}" ${tier >= 2 ? 'filter="url(#wash)"' : ''}/>`;
-  balloon += strokes(circlePts(150, 38, 21, 26, 20), br, { passes: 2, j: 1.2, color: tier === 0 ? '#b98a86' : '#7a2a22', op: tier === 0 ? 0.45 : 0.8, w: 1.4 });
-  balloon += `<path d="M142,27 q4,-8 10,-9" stroke="#fff" stroke-width="3" opacity="${tier ? 0.5 : 0.25}" fill="none" stroke-linecap="round"/>`;
-  balloon += `<path d="M150,64 l-3,5 l6,0 z" fill="${bFill}" opacity="${bOp.toFixed(2)}"/>`;
-  balloon += strokes([[150, 68], [146, 95], [150, 125], [137, 158]], br, { passes: 1, j: 1.6, color: st.ink, op: st.op * 0.8, w: 1 });
-  if (tier >= 2) for (let i = 0; i < 6 + tier * 3; i++) {
-    const a = br() * Math.PI * 2, d = 30 + br() * 30;
-    balloon += `<circle class="mote" style="animation-delay:${(br() * 3).toFixed(2)}s" cx="${(150 + Math.cos(a) * d).toFixed(1)}" cy="${(38 + Math.sin(a) * d).toFixed(1)}" r="${(1 + br() * 1.8).toFixed(1)}" fill="#ffb3a7" opacity=".8"/>`;
+  if (withBalloon) {
+    const br = rng('balloon');
+    const bFill = ['#ecc5c3', '#c94a3e', '#d63a2f', '#e2343a'][tier];
+    const bOp = [0.22 + 0.2 * within, 0.75, 0.88, 1][tier];
+    if (tier >= 3) balloon += `<circle cx="150" cy="38" r="58" fill="url(#balloonGlow)"/>`;
+    balloon += `<path d="${sketchPath(circlePts(150, 38, 21, 26, 20), br, 1)}" fill="${bFill}" opacity="${bOp.toFixed(2)}" ${tier >= 2 ? 'filter="url(#wash)"' : ''}/>`;
+    balloon += strokes(circlePts(150, 38, 21, 26, 20), br, { passes: 2, j: 1.2, color: tier === 0 ? '#b98a86' : '#7a2a22', op: tier === 0 ? 0.45 : 0.8, w: 1.4 });
+    balloon += `<path d="M142,27 q4,-8 10,-9" stroke="#fff" stroke-width="3" opacity="${tier ? 0.5 : 0.25}" fill="none" stroke-linecap="round"/>`;
+    balloon += `<path d="M150,64 l-3,5 l6,0 z" fill="${bFill}" opacity="${bOp.toFixed(2)}"/>`;
+    balloon += strokes([[150, 68], [146, 100], [151, 135], [141, 168], [handR[0], handR[1] - 2]], br, { passes: 1, j: 1.4, color: st.ink, op: st.op * 0.8, w: 1 });
+    if (tier >= 2) for (let i = 0; i < 6 + tier * 3; i++) {
+      const a = br() * Math.PI * 2, d = 30 + br() * 30;
+      balloon += `<circle class="mote" style="animation-delay:${(br() * 3).toFixed(2)}s" cx="${(150 + Math.cos(a) * d).toFixed(1)}" cy="${(38 + Math.sin(a) * d).toFixed(1)}" r="${(1 + br() * 1.8).toFixed(1)}" fill="#ffb3a7" opacity=".8"/>`;
+    }
   }
 
-  const aura = tier === 0 ? `<ellipse cx="100" cy="165" rx="52" ry="108" fill="url(#noahAura)"/>` : '';
-  const shadow = `<ellipse cx="100" cy="268" rx="${tier ? 30 : 22}" ry="5" fill="#2c2723" opacity="${[0.05, 0.1, 0.14, 0.18][tier]}"/>`;
+  const aura = tier === 0 ? `<ellipse cx="100" cy="205" rx="44" ry="74" fill="url(#noahAura)"/>` : '';
+  const shadow = `<ellipse cx="100" cy="270" rx="${tier ? 24 : 18}" ry="4.5" fill="#2c2723" opacity="${[0.05, 0.1, 0.14, 0.18][tier]}"/>`;
   return `<svg class="noah ${walking ? 'walking' : ''} tier-${tier}" viewBox="0 -30 200 310" width="${size}" height="${size * 1.55}" role="img" aria-label="Noah">
     ${aura}${shadow}
-    <g class="balloon">${balloon}</g>
-    <g class="body">${paint}<g filter="url(#soft)">${ink}</g></g>
+    ${balloon ? `<g class="balloon">${balloon}</g>` : ''}
+    ${figure}
+  </svg>`;
+}
+
+// ── Opening scene: Noah asleep in a field of tall grass ───────
+export function drawStoryScene() {
+  const r = rng('field');
+  const ink = '#6b645b';
+  let back = '', front = '';
+  // horizon + a couple of soft hills
+  back += strokes([[0, 262], [140, 250], [300, 258], [470, 244], [640, 256], [800, 248]], r, { passes: 2, j: 2, color: ink, op: 0.35, w: 1.2 });
+  back += strokes([[520, 250], [600, 214], [690, 206], [800, 222]], r, { passes: 2, j: 2, color: ink, op: 0.22, w: 1 });
+  // clouds
+  for (const [cx, cy, s] of [[150, 80, 1], [610, 60, 1.3], [380, 120, 0.7]]) {
+    back += strokes([[cx - 40 * s, cy + 8], [cx - 28 * s, cy - 10 * s], [cx - 6 * s, cy - 18 * s], [cx + 14 * s, cy - 10 * s], [cx + 34 * s, cy - 14 * s], [cx + 48 * s, cy + 6], [cx - 40 * s, cy + 8]], r, { passes: 2, j: 2, color: ink, op: 0.22, w: 1 });
+  }
+  // grass behind him
+  const clear = (x, y) => x > 300 && x < 530 && y > 255 && y < 385;   // keep the grass off his face and body
+  for (let i = 0; i < 260; i++) {
+    const x = r() * 820 - 10, y = 262 + r() * 120, h = 10 + r() * 26;
+    if (clear(x, y)) continue;
+    back += strokes([[x, y], [x + (r() - 0.4) * 10, y - h]], r, { passes: 1, j: 1, color: i % 7 ? ink : '#7d9a5a', op: 0.18 + r() * 0.3, w: 0.9 });
+  }
+  // a few little flowers
+  for (let i = 0; i < 14; i++) {
+    const x = 30 + r() * 740, y = 280 + r() * 150;
+    back += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(2 + r() * 2).toFixed(1)}" fill="${['#e9b8b8', '#f2d27a', '#cfd8f0'][i % 3]}" opacity=".7"/>`;
+  }
+  // grass in front, brushing over him
+  for (let i = 0; i < 220; i++) {
+    const x = r() * 820 - 10, y = 350 + r() * 110, h = 12 + r() * 34;
+    if (clear(x, y - h * 0.6)) continue;
+    front += strokes([[x, y], [x + (r() - 0.5) * 12, y - h]], r, { passes: 1, j: 1, color: i % 6 ? ink : '#7d9a5a', op: 0.22 + r() * 0.35, w: 1 });
+  }
+  // Noah lying on his back, head to the left; balloon string still round his wrist
+  const boy = drawNoah(1, { pose: 'lying', bare: true, strong: true });
+  const T = 'translate(410,318) scale(1.45) rotate(-90) translate(-100,-207)';
+  // right hand (123,236) → after the transform ≈ (452, 285)
+  const br = rng('story-balloon');
+  let balloon = strokes([[452, 285], [472, 250], [500, 210], [515, 168], [520, 140]], br, { passes: 1, j: 2, color: ink, op: 0.4, w: 1.1 });
+  balloon += `<path d="${sketchPath(circlePts(522, 108, 24, 30, 20), br, 1)}" fill="#ecc5c3" opacity=".42"/>`;
+  balloon += strokes(circlePts(522, 108, 24, 30, 20), br, { passes: 2, j: 1.2, color: '#b98a86', op: 0.5, w: 1.4 });
+  return `<svg class="story-scene" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice" role="img" aria-label="A small boy lying asleep in a field of tall grass, a pale balloon tied to his wrist">
+    <g>${back}</g>
+    <g class="story-balloon">${balloon}</g>
+    <g class="story-boy" transform="${T}">${boy}</g>
+    <g>${front}</g>
   </svg>`;
 }
 

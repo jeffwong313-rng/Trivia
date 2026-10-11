@@ -4,6 +4,7 @@ import { MODES, TIERS, CONFIDENCE, MAPS, BOSS, STATS, SKILLS, SCORE, TOPICS, par
   partyDamageMult, partyExpMult, expToNext, statFx, SPEED_CAP_SECONDS } from './config.js';
 import { generateMap, findNode, choices, rollTier, isPuzzleTopic } from './map.js';
 import { hintsFor } from './questions.js';
+import { Feedback } from './feedback.js';
 
 const SAVE_KEY = 'noah_run';
 const VERSION = 2;
@@ -109,13 +110,16 @@ export class Game {
     this.save();
     return true;
   }
-  // Too obscure? Never see it again, and get a free replacement.
-  flag() {
+  // Flag a question (too niche / incomplete / other): it's pulled from the
+  // game, saved for review, and the party gets a free reroll.
+  flag(reason = 'other', note = '') {
     const s = this.s, cq = s.q;
     if (!cq || cq.answered !== null || cq.q.test) return false;
     this.src.block(cq.q);
+    Feedback.add({ ...cq.q, topic: cq.topic }, reason, note);
     const keep = { dropped: cq.dropped, bonus: cq.bonus, safe: cq.safe };
-    this.ask(cq.tier, cq.topic, { noRepeat: true, bonus: keep.bonus, safe: keep.safe });
+    const topic = this.s.topics.length > 1 ? this.randomTopic((t) => t !== cq.topic) : cq.topic;
+    this.ask(cq.tier, topic, { noRepeat: true, bonus: keep.bonus, safe: keep.safe });
     s.q.dropped = keep.dropped;
     this.save();
     return true;

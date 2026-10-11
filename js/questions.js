@@ -3,6 +3,7 @@
 //     filtered to drop overly specific ones (exact years, release dates…)
 //   • a hand-written bank (backup for every topic, and the only source for some)
 //   • generated brain teasers (puzzles.js)
+import { REMOVED } from './removed.js';
 import { TOPICS, ALL_TOPIC_IDS } from './config.js';
 import { generate } from './puzzles.js';
 
@@ -418,7 +419,7 @@ export class QuestionSource {
   constructor() {
     this.pools = {};                       // "topic|tier" → [question]
     this.seen = new Set(store.get('noah_seen', []));
-    this.blocked = new Set(store.get('noah_blocked', []));
+    this.blocked = new Set([...store.get('noah_blocked', []), ...REMOVED]);
     this.missed = store.get('noah_missed', []);
     this.recent = [];
     this.token = null;
@@ -513,13 +514,18 @@ export class QuestionSource {
     this.missed = this.missed.filter((m) => m.id !== q.id);
     if (n !== this.missed.length) store.set('noah_missed', this.missed);
   }
-  // "Too obscure" flag: never show this question again
+  // Flagged: never show this question again (until it's restored in the review screen)
   block(q) {
     if (q.test) return;
     this.blocked.add(q.id);
-    store.set('noah_blocked', [...this.blocked]);
+    store.set('noah_blocked', [...this.blocked].filter((id) => !REMOVED.includes(id)));
     this.missed = this.missed.filter((m) => m.id !== q.id);
     store.set('noah_missed', this.missed);
+  }
+  unblock(id) {
+    if (REMOVED.includes(id)) return;
+    this.blocked.delete(id);
+    store.set('noah_blocked', [...this.blocked].filter((x) => !REMOVED.includes(x)));
   }
 
   bankFor(topic) {
@@ -565,5 +571,5 @@ export class QuestionSource {
     }
     return opts.borrowed ? null : (notRecent[0] || bank[0] || { ...generate('logic', tier), topicName: TOPICS.logic.name });
   }
-  recentSet() { return new Set(this.recent); }
+  recentSet() { return new Set([...this.recent, ...this.blocked]); }
 }

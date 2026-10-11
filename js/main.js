@@ -1,7 +1,10 @@
 // Screens and interaction. One shared screen (a laptop or a TV); phones can
 // join as controllers. The whole party plays as one.
 import { TITLE, MODES, PARTIES, CONFIDENCE, STATS, SKILLS, MAPS, NOAH_TIERS, TIERS, TOPIC_GROUPS, TOPICS, ALL_TOPIC_IDS, statFx, partyById } from './config.js';
-import { SVG_DEFS, drawNoah, drawBoss, drawShape, drawMap, drawVisual, drawSwatch, nodeXY, noahTier } from './art.js';
+import { SVG_DEFS, drawNoah, drawBoss, drawShape, drawMap, drawVisual, drawSwatch, drawStoryScene, nodeXY, noahTier } from './art.js';
+import { Sound, Settings } from './audio.js';
+import { Feedback, FLAG_REASONS, reasonLabel } from './feedback.js';
+import { REMOVED } from './removed.js';
 import { QuestionSource, answerText } from './questions.js';
 import { Game } from './game.js';
 import { Room, joinUrl } from './remote.js';
@@ -34,6 +37,12 @@ const ui = {
 if (!ui.setup.topics.size) ui.setup.topics = new Set(ALL_TOPIC_IDS);
 const saveSetup = () => store.set('noah_setup', { size: ui.setup.size, mode: ui.setup.mode, party: ui.setup.party, topics: [...ui.setup.topics] });
 source.setTopics([...ui.setup.topics]);
+Sound.enableMusic();
+// Soft tap sound on every button / path (the lock-in button plays right/wrong instead)
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('button, .node.selectable');
+  if (b && !b.disabled && !b.matches('[data-act=lock]')) Sound.click();
+}, true);
 
 function toast(msg) {
   const t = document.createElement('div');
@@ -62,6 +71,8 @@ function showTitle() {
       <div class="row">
         <button class="btn small ghost link" data-act="how">How to play</button>
         <button class="btn small ghost link" data-act="board">Leaderboard</button>
+        <button class="btn small ghost link" data-act="settings">Settings</button>
+        <button class="btn small ghost link" data-act="feedback">Flagged questions${Feedback.pending() ? ` (${Feedback.pending()})` : ''}</button>
       </div>
     </div>
   </div>`;
@@ -75,6 +86,8 @@ function showTitle() {
     if (a === 'joincode') showJoinCode();
     if (a === 'how') showHow();
     if (a === 'board') showBoard();
+    if (a === 'settings') showSettings();
+    if (a === 'feedback') showFeedback();
   };
   focusFirst();
 }
@@ -125,7 +138,7 @@ function showHow() {
         <li><b>No timer.</b> Take your time. Answering quickly earns a small score bonus, which fades away at 2 minutes.</li>
         <li><b>Pick a path.</b> Usually three paths at every step. <i>Perception</i> clears the fog and shows each path's topic, then its difficulty.</li>
         <li><b>Level up.</b> One stat point per level. Every 4 levels, learn or upgrade a skill. Noah's drawing fills in as he grows.</li>
-        <li><b>Too obscure?</b> Flag a question and it's swapped for free and never shown again.</li>
+        <li><b>⚑ Flag question</b> if it's too niche, incomplete, or wrong. It's removed from the game, saved under <i>Flagged questions</i> on the title screen for review, and you get a free reroll.</li>
         <li><b>Bosses</b> wait at the top of each map: 5 questions. Save your mana for them.</li>
         <li><b>Phones + TV:</b> on the big screen choose "Play on a TV with phones", then scan the code (or tap "Join a game on this phone" and type it). Everyone reads the question and picks privately, then the picks are revealed so you can discuss. Phones can also press every button on the big screen, so a TV with no mouse works fine.</li>
         <li><b>Keyboard / TV remote:</b> arrow keys move, Enter selects. Keys 1–4 pick an answer (press again to change how sure).</li>
@@ -133,7 +146,7 @@ function showHow() {
     </div>
     <button class="btn" style="margin-top:20px" data-act="back">Back</button>
   </div>`;
-  app.onclick = (e) => { if (e.target.closest('[data-act=back]')) (game.s && !['victory', 'defeat'].includes(game.s.phase) && app.dataset.from === 'game' ? renderGame() : showTitle()); };
+  app.onclick = (e) => { if (e.target.closest('[data-act=back]')) backFromMenu(); };
   focusFirst();
 }
 
@@ -151,6 +164,141 @@ function showBoard(highlight) {
   </div>`;
   app.onclick = (e) => { if (e.target.closest('[data-act=back]')) showTitle(); };
   focusFirst();
+}
+
+const backFromMenu = () => (game.s && !['victory', 'defeat'].includes(game.s.phase) && app.dataset.from === 'game' ? renderGame() : showTitle());
+
+// ── Settings ──────────────────────────────────────────────────
+function showSettings() {
+  const draw = () => {
+    const st = Settings.get();
+    const toggle = (key, title, sub, invert = false) => {
+      const on = invert ? !st[key] : !!st[key];
+      return `<button class="choice setting ${on ? 'on' : ''}" data-toggle="${key}" data-invert="${invert ? 1 : ''}" aria-pressed="${on}" data-rlabel="${title}: ${on ? 'on' : 'off'}">
+        <div class="big">${on ? '✓ ' : ''}${title}</div><div class="sub">${sub}</div></button>`;
+    };
+    app.innerHTML = `
+    <div class="screen">
+      <div class="setup">
+        <h2>Settings</h2>
+        <section data-rsection="Story & tutorials">
+          <h3>Story & tutorials</h3>
+          <div class="choice-grid">
+            ${toggle('skipTutorial', 'Tutorials', 'Show the short stats tutorial at the start of each journey.', true)}
+            ${toggle('skipStory', 'Opening story', 'Show Noah waking up in the field before each journey.', true)}
+          </div>
+        </section>
+        <section data-rsection="Sound">
+          <h3>Sound</h3>
+          <div class="choice-grid">
+            ${toggle('music', 'Piano music', 'A slow, quiet piano theme in the background.')}
+            ${toggle('sfx', 'Sound effects', 'Soft taps, and gentle chimes for right and wrong answers.')}
+          </div>
+          <label class="vol-row"><span>Volume</span>
+            <input type="range" id="vol" min="0" max="100" step="5" value="${Math.round(st.volume * 100)}">
+            <span id="volnum">${Math.round(st.volume * 100)}%</span></label>
+          <div class="row small" style="margin-top:8px"><button class="btn small ghost link" data-vol="-10" data-rlabel="Volume down">− Quieter</button><button class="btn small ghost link" data-vol="10" data-rlabel="Volume up">+ Louder</button></div>
+        </section>
+        <div class="row" style="margin-top:22px"><button class="btn primary" data-act="back">Done</button></div>
+      </div>
+    </div>`;
+    $('#vol').oninput = (e) => { Settings.set({ volume: +e.target.value / 100 }); $('#volnum').textContent = `${e.target.value}%`; };
+    $('#vol').onchange = () => Sound.click();
+  };
+  draw();
+  app.onclick = (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.toggle) { const k = t.dataset.toggle; Settings.set({ [k]: !Settings.get()[k] }); draw(); if (ui.kbd) $(`[data-toggle="${k}"]`)?.focus(); }
+    else if (t.dataset.vol) { const v = Math.max(0, Math.min(1, Settings.get().volume + +t.dataset.vol / 100)); Settings.set({ volume: Math.round(v * 100) / 100 }); draw(); }
+    else if (t.dataset.act === 'back') backFromMenu();
+  };
+  focusFirst('.choice');
+}
+
+// ── Flagged questions: review later, then remove from the bank ──
+function showFeedback() {
+  const draw = () => {
+    const list = Feedback.all();
+    const removed = list.filter((f) => f.status === 'removed');
+    const fixed = (f) => !(f.source === 'gen' && !/^(RID|EMO)-/.test(f.id));   // generated puzzles are new every time
+    const card = (f) => `
+      <div class="sk fb-card ${f.status}">
+        <div class="fb-head"><span class="chip red">${esc(reasonLabel(f.reason))}</span>
+          <span class="small muted">${esc(f.topicName || f.topic)} · ${'★'.repeat(f.tier || 1)} · ${new Date(f.date).toLocaleDateString()} · <code>${esc(f.id)}</code></span>
+          ${f.status === 'removed' ? '<span class="chip">Deleted from bank</span>' : ''}</div>
+        <div class="fb-q">${esc(f.prompt)}</div>
+        <div class="small">${f.answers.map((a) => (a === f.correct ? `<b>✓ ${esc(a)}</b>` : esc(a))).join(' · ')}</div>
+        ${f.note ? `<div class="fb-note">“${esc(f.note)}”</div>` : ''}
+        <div class="row fb-actions">
+          ${!fixed(f) ? `<span class="small muted">A generated puzzle (made fresh each time), so there's nothing to delete — this is a note about that puzzle type.</span><button class="btn small" data-restore="${esc(f.id)}">Dismiss</button>`
+            : `${f.status === 'pending' ? `<button class="btn small red" data-del="${esc(f.id)}" data-rlabel="Delete from bank: ${esc(f.prompt.slice(0, 40))}">Delete from bank</button>` : `<button class="btn small" data-undo="${esc(f.id)}">Undo delete</button>`}
+          <button class="btn small ghost link" data-restore="${esc(f.id)}" data-rlabel="Restore: ${esc(f.prompt.slice(0, 40))}">Keep it (put back in the game)</button>`}
+        </div>
+      </div>`;
+    app.innerHTML = `
+    <div class="screen">
+      <div class="setup feedback">
+        <h2>Flagged questions</h2>
+        <p class="center-text muted">Questions players flagged during games on this device. Flagged questions are already out of the game here. Review them: <b>Delete from bank</b> if you agree, or <b>Keep it</b> to put it back.</p>
+        ${removed.length ? `<div class="note fb-export">
+          <b>${removed.length} marked for deletion.</b> To remove them for everyone, copy the list and paste it over <code>js/removed.js</code> on GitHub.
+          <div class="row" style="margin-top:8px;justify-content:flex-start"><button class="btn small primary" data-act="copy">Copy removal list</button><button class="btn small" data-act="download">Download all feedback</button></div>
+          <textarea id="removed-out" readonly rows="4" hidden></textarea>
+        </div>` : ''}
+        ${list.length ? list.map(card).join('') : '<p class="note">Nothing flagged yet. During a question, tap ⚑ Flag question.</p>'}
+        <div class="row" style="margin-top:22px"><button class="btn" data-act="back">Back</button></div>
+      </div>
+    </div>`;
+  };
+  const removalFile = () => {
+    const ids = [...new Set([...REMOVED, ...Feedback.all().filter((f) => f.status === 'removed' && !(f.source === 'gen' && !/^(RID|EMO)-/.test(f.id))).map((f) => f.id)])];
+    return `// Questions removed from the game for everyone, after reviewing flags.\n// In the game: title screen → Flagged questions → "Delete from bank" on each\n// one you agree with → "Copy removal list", then paste the result over this\n// whole file on GitHub. IDs are stable, so nothing else needs editing.\nexport const REMOVED = [\n${ids.map((id) => `  ${JSON.stringify(id)},`).join('\n')}\n];\n`;
+  };
+  draw();
+  app.onclick = async (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.del) { Feedback.setStatus(t.dataset.del, 'removed'); draw(); }
+    else if (t.dataset.undo) { Feedback.setStatus(t.dataset.undo, 'pending'); draw(); }
+    else if (t.dataset.restore) { source.unblock(t.dataset.restore); Feedback.remove(t.dataset.restore); toast('Back in the game.'); draw(); }
+    else if (t.dataset.act === 'copy') {
+      const text = removalFile();
+      const out = $('#removed-out'); out.hidden = false; out.value = text; out.select();
+      try { await navigator.clipboard.writeText(text); toast('Copied! Paste it over js/removed.js on GitHub.'); } catch { toast('Select the text below and copy it.'); }
+    } else if (t.dataset.act === 'download') {
+      const blob = new Blob([JSON.stringify(Feedback.all(), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'noah-flagged-questions.json'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } else if (t.dataset.act === 'back') showTitle();
+  };
+  focusFirst();
+}
+
+// ── Opening story: white, then Noah asleep in the grass ───────
+function showStory(done) {
+  if (Settings.get().skipStory) return done();
+  app.dataset.from = '';
+  app.innerHTML = `
+  <div class="story" data-screen="story">
+    ${drawStoryScene()}
+    <div class="story-white"></div>
+    <div class="story-text">
+      <p class="l1">“Where am I?…”</p>
+      <p class="l2">“I guess I need to find my way home…”</p>
+    </div>
+    <button class="btn small ghost story-skip" data-act="skip" data-rlabel="Skip the story">Skip ➜</button>
+    <div class="story-go"><button class="btn primary" data-act="go" data-rlabel="Begin the journey">Begin ➜</button></div>
+  </div>`;
+  let finished = false;
+  const finish = () => { if (finished) return; finished = true; app.onclick = null; done(); };
+  app.onclick = (e) => { if (e.target.closest('[data-act=skip], [data-act=go]')) finish(); };
+  focusFirst('[data-act=skip]');
+}
+function startJourney() {
+  ui.lastMapScroll = null;
+  showStory(() => {
+    ui.tutorialPage = Settings.get().skipTutorial ? null : 0;
+    renderGame();
+  });
 }
 
 // ── Phones: lobby with a QR code ───────────────────────────────
@@ -282,8 +430,12 @@ function showTopics() {
     app.innerHTML = `
     <div class="screen">
       <div class="setup topics">
+        <div class="all-set">
+          <button class="btn primary big-go" data-act="go" ${st.topics.size ? '' : 'disabled'} data-rlabel="All set — set off with ${st.topics.size} topics">All set — set off ➜</button>
+          <span class="small muted">${st.topics.size === ALL_TOPIC_IDS.length ? 'Every topic is on.' : `${st.topics.size} of ${ALL_TOPIC_IDS.length} topics on.`} Happy with that? Go straight in.</span>
+        </div>
         <h2>What should the questions be about?</h2>
-        <p class="center-text muted">Everything is on. Tap anything your group would rather skip.</p>
+        <p class="center-text muted">Everything is on. Or tap anything your group would rather skip.</p>
         ${TOPIC_GROUPS.map((g) => `
         <section data-rsection="${g.name}">
           <div class="group-head"><h3>${g.name}</h3>
@@ -313,8 +465,7 @@ function showTopics() {
     else if (t.dataset.act === 'go' && st.topics.size) {
       const party = partyById(st.size);
       game.newRun({ partySize: st.size, mode: st.mode, partyName: st.party.trim(), players: st.names.slice(0, party.names).map((n) => n.trim()).filter(Boolean), topics: [...st.topics] });
-      ui.lastMapScroll = null;
-      renderGame();
+      startJourney();
     }
   };
 }
@@ -344,6 +495,7 @@ function hudHTML() {
       <button class="btn small ghost link no-remote" data-act="quit">Save & quit</button>
       ${ui.room ? `<button class="btn small ghost link no-remote" id="phone-chip" data-act="showjoin">📱 ${ui.room.code} · ${ui.room.players.filter((p) => p.connected).length}</button>` : `<button class="btn small ghost link no-remote" data-act="addphones">📱 Phones</button>`}
       <button class="btn small ghost link no-remote" data-act="howin">Help</button>
+      <button class="btn small ghost link no-remote" data-act="settingsin" title="Settings">⚙</button>
     </div>
   </aside>`;
 }
@@ -395,6 +547,7 @@ function onGameClick(e) {
   const a = e.target.closest('[data-act]')?.dataset.act;
   if (a === 'quit') { game.save(); app.dataset.from = ''; showTitle(); }
   if (a === 'howin') showHow();
+  if (a === 'settingsin') showSettings();
   if (a === 'showjoin') showJoinModal();
   if (a === 'addphones') ensureRoom().then((r) => { if (r) { refreshHud(); showJoinModal(); } });
 }
@@ -421,6 +574,7 @@ function renderOverlay() {
   if (s.phase === 'event') return renderEvent(ov);
   if (s.phase === 'levelup') return renderLevelUp(ov);
   if (s.phase === 'mapClear') return renderMapClear(ov);
+  if (s.phase === 'map' && ui.tutorialPage != null) return renderTutorial(ov);
   ov.innerHTML = '';
 }
 
@@ -435,7 +589,7 @@ const answerLabel = (a, i) => `${letter(i)}: ${typeof a === 'string' ? a : a.tex
 // Phone votes for the current question
 function syncVoteKey() {
   const key = game.s?.q?.key || null;
-  if (key !== ui.voteKey) { ui.voteKey = key; ui.votes = new Map(); ui.revealed = false; }
+  if (key !== ui.voteKey) { ui.voteKey = key; ui.votes = new Map(); ui.revealed = false; ui.flagging = false; }
 }
 function connectedPlayers() { return ui.room ? ui.room.players.filter((p) => p.connected) : []; }
 function votesAt(i, c) { return [...ui.votes.entries()].filter(([, v]) => v.i === i && (c === undefined || v.c === c)).map(([id]) => ui.room?.players.find((p) => p.id === id)).filter(Boolean); }
@@ -516,7 +670,7 @@ function renderQuestion(ov) {
           ${q.returning ? '<div class="returning">↺ One you missed before</div>' : ''}
           ${cq.safe ? '<div class="returning" style="color:var(--green)">No harm if wrong</div>' : ''}
           ${cq.bonus === 'double' ? '<div class="returning" style="color:var(--gold)">Double EXP</div>' : ''}</div>
-        ${!answered && !q.test ? '<button class="flag" data-act="flag" title="Too obscure? Skip it for free and never see it again" data-rlabel="Too obscure — skip this question">⚑ Too obscure?</button>' : ''}
+        ${!answered && !q.test && !ui.flagging ? '<button class="flag" data-act="flag" title="Too niche or broken? Flag it: it\'s removed and you get a free reroll" data-rlabel="⚑ Flag this question">⚑ Flag question</button>' : ''}
       </div>
       <div class="q-prompt">${esc(q.prompt)}</div>
       ${drawVisual(q.visual)}
@@ -534,7 +688,14 @@ function renderQuestion(ov) {
       </div>
       ${!answered ? `<div class="conf-legend"><span>← not sure <small>×${CONFIDENCE[0].exp} EXP · ½ damage</small></span><span>sure</span><span>definitely → <small>×${CONFIDENCE[2].exp} EXP · ×${CONFIDENCE[2].dmg} damage</small></span></div>` : ''}
       ${game.hints().length ? `<div class="hints">${game.hints().map((h) => `<p>${esc(h)}</p>`).join('')}</div>` : ''}
-      ${!answered ? `
+      ${!answered && ui.flagging ? `
+      <div class="flag-box sk" data-rsection="Flag this question">
+        <h3>Flag this question?</h3>
+        <p class="small muted">It's taken out of the game and saved to your feedback for review. You get a free reroll.</p>
+        <div class="row flag-reasons">${FLAG_REASONS.map((r) => `<button class="btn ${r.id === 'other' ? '' : 'red'}" data-flag="${r.id}" data-rlabel="Flag: ${r.label}">${r.label}</button>`).join('')}</div>
+        <input type="text" id="flag-note" maxlength="300" placeholder="Optional note (what's wrong with it?)" value="${esc(ui.flagNote || '')}">
+        <div class="row" style="margin-top:8px"><button class="btn small ghost link" data-act="flag-cancel" data-rlabel="Cancel flag">Cancel</button></div>
+      </div>` : !answered ? `
       <div class="tools">${tools.join('')}</div>
       ${voteBarHTML()}
       <div class="lockrow"><span class="kbd">Tap the left, middle or right of an answer · 1–4 on a keyboard</span>
@@ -543,6 +704,8 @@ function renderQuestion(ov) {
     </div>
   </div>`;
   ov.onclick = onQuestionClick;
+  const note = $('#flag-note', ov);
+  if (note) note.oninput = (e) => { ui.flagNote = e.target.value; };
   if (ui.kbd) {
     const want = ui.focusWant;
     ui.focusWant = null;
@@ -574,12 +737,14 @@ function lockIn() {
   const r = game.answer(ui.sel.i, ui.sel.c);
   if (!r) return;
   if (r.retry) {
+    Sound.bad();
     toast('Not that one — Second Guess crossed it out. Try again!');
     ui.sel = null;
     refreshHud();
     return renderQuestion($('#overlay'));
   }
   ui.result = r; ui.sel = null;
+  if (r.right) { Sound.good(); if (r.levelUps) setTimeout(() => Sound.levelUp(), 450); } else Sound.bad();
   refreshHud();
   renderQuestion($('#overlay'));
 }
@@ -605,8 +770,13 @@ function onQuestionClick(e) {
     refreshHud();
     return renderQuestion($('#overlay'));
   }
-  if (a === 'flag') {
-    if (game.flag()) { ui.sel = null; toast('Gone for good. Here\'s a different one.'); }
+  if (a === 'flag') { ui.flagging = true; ui.flagNote = ''; ui.focusWant = '[data-flag]'; return renderQuestion($('#overlay')); }
+  if (a === 'flag-cancel') { ui.flagging = false; return renderQuestion($('#overlay')); }
+  if (t.dataset.flag) {
+    const note = (ui.flagNote || '').trim();
+    ui.flagging = false;
+    if (game.flag(t.dataset.flag, note)) { ui.sel = null; toast(`Flagged (${reasonLabel(t.dataset.flag).toLowerCase()}) — saved for review. Free reroll!`); }
+    refreshHud();
     return renderQuestion($('#overlay'));
   }
   if (a === 'reveal') { reveal(); return renderQuestion($('#overlay')); }
@@ -618,6 +788,65 @@ function onQuestionClick(e) {
     game.continueAfterAnswer();
     return renderGame();
   }
+}
+
+// ── Tutorial: a quick look at S.P.E.C.I.A.L. before the first path ──
+const STAT_TIPS = {
+  S: { does: 'Answering “Definitely” earns much more EXP.', when: 'Your group usually knows when it’s right.' },
+  P: { does: 'Clears the fog. At 2 you see each path’s topic, at 3 its difficulty.', when: 'You want to steer toward topics you know.' },
+  E: { does: '+25 max HP per point, so mistakes hurt less.', when: 'Wrong answers keep knocking you down.' },
+  C: { does: '+2 rerolls per map. Every 3 points, a reroll can make a question easier.', when: 'You keep getting stuck on hard questions.' },
+  I: { does: 'More mana, and more mana back per right answer, for skills like 50/50 and Hint.', when: 'You love using skills (first one at level 5).' },
+  A: { does: 'More ? surprises on the map, and a bigger speed bonus to your score.', when: 'You answer fast and chase high scores.' },
+  L: { does: 'Better odds of good surprises at ? spots: healing, mana, EXP, choosing a topic.', when: 'You like gambling on the ? spots.' },
+};
+const TUTORIAL_PAGES = 3;
+function renderTutorial(ov) {
+  const p = ui.tutorialPage;
+  const s = game.s;
+  let body = '';
+  if (p === 0) body = `
+    <div class="lv-head">${drawNoah(s.level, { size: 90 })}
+      <div><h2>How Noah grows</h2>
+      <p>Right answers give <b>EXP</b>. Every level-up gives the team <b>1 point</b> to put into one of Noah’s seven stats: <b>S.P.E.C.I.A.L.</b></p>
+      <p class="muted">Every 4 levels he also learns a skill. Next: what each stat does, so you know where to put your points.</p></div>
+    </div>`;
+  else if (p === 1) body = `
+    <h2>S.P.E.C.I.A.L.</h2>
+    <div class="tut-stats">
+      ${Object.entries(STATS).map(([k, st]) => `<div class="tut-stat sk"><span class="tut-letter">${k}</span><div><div class="name">${st.name}</div><div class="blurb">${STAT_TIPS[k].does}</div><div class="tut-when">Pick it if: ${STAT_TIPS[k].when}</div></div></div>`).join('')}
+    </div>`;
+  else body = `
+    <h2>Before you set off</h2>
+    <ul class="tut-list">
+      <li><b>Tap an answer where you feel it:</b> left = not sure, middle = sure, right = definitely. More sure = more EXP if right, more damage if wrong. Then <b>Lock in</b>.</li>
+      <li><b>↻ Reroll</b> swaps a question for one on a different topic (Charisma gives more).</li>
+      <li><b>⚑ Flag question</b> if it’s too niche or broken: it’s removed, and the swap is free.</li>
+      <li><b>Pick paths together.</b> A boss waits at the top of every map.</li>
+    </ul>`;
+  ov.innerHTML = `
+  <div class="overlay"><div class="panel tutorial">
+    <div class="tut-top"><span class="small muted">Tutorial · ${p + 1} of ${TUTORIAL_PAGES}</span>
+      <button class="btn small ghost link" data-act="tut-skip" data-rlabel="Skip Tutorial">Skip Tutorial</button></div>
+    ${body}
+    <div class="tut-dots">${Array.from({ length: TUTORIAL_PAGES }, (_, i) => `<span class="${i === p ? 'on' : ''}"></span>`).join('')}</div>
+    <div class="lockrow">
+      ${p > 0 ? '<button class="btn" data-act="tut-back">Back</button>' : '<button class="btn small ghost link" data-act="tut-never" data-rlabel="Never show tutorials">Don’t show tutorials again</button>'}
+      <button class="btn primary" data-act="tut-next">${p < TUTORIAL_PAGES - 1 ? 'Next ➜' : 'Let’s go ➜'}</button>
+    </div>
+  </div></div>`;
+  ov.onclick = (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act;
+    if (!a) return;
+    if (a === 'tut-next') ui.tutorialPage = p + 1 >= TUTORIAL_PAGES ? null : p + 1;
+    else if (a === 'tut-back') ui.tutorialPage = Math.max(0, p - 1);
+    else if (a === 'tut-skip') ui.tutorialPage = null;
+    else if (a === 'tut-never') { Settings.set({ skipTutorial: true }); ui.tutorialPage = null; toast('Tutorials are off. Turn them back on in Settings.'); }
+    else return;
+    if (ui.tutorialPage == null) return renderGame();
+    renderTutorial(ov);
+  };
+  focusFirst('[data-act=tut-next]');
 }
 
 function renderBossIntro(ov) {

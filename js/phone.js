@@ -5,6 +5,7 @@
 import { CONFIDENCE, TIERS } from './config.js';
 import { drawNoah, drawShape, drawVisual, drawSwatch } from './art.js';
 import { ID_PREFIX, loadPeer, peerOptions } from './remote.js';
+import { Sound } from './audio.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -17,7 +18,7 @@ export function startPhone(code) {
   const app = $('#app');
   const clientId = get('noah_client', null) || (() => { const id = 'p' + Math.random().toString(36).slice(2, 10); set('noah_client', id); return id; })();
   let name = get('noah_name', '');
-  let peer = null, conn = null, state = null, myVote = null, status = 'idle', lastKey = null;
+  let peer = null, conn = null, state = null, myVote = null, status = 'idle', lastKey = null, soundedKey = null;
 
   function showJoin(msg = '') {
     app.innerHTML = `
@@ -37,35 +38,69 @@ export function startPhone(code) {
     $('#pname').onkeydown = (e) => { if (e.key === 'Enter') go(); };
   }
 
+  // Connecting: phone → PeerJS broker → the big screen (WebRTC data channel).
+  // Each step has a timeout, so a phone never sits on "Connecting…" forever;
+  // it tears everything down and tries again, and after a couple of misses
+  // shows tips plus a Try again button.
+  let attempt = 0, fails = 0, openTimer = null;
+  function cleanup() {
+    clearTimeout(openTimer);
+    try { conn?.close(); } catch {}
+    try { peer?.destroy(); } catch {}
+    conn = null; peer = null;
+  }
   async function connect() {
+    clearTimeout(retryTimer);
+    cleanup();
     status = 'connecting';
-    renderStatus('Connecting to the big screen…');
+    attempt++;
+    const mine = attempt;
+    renderStatus('Reaching the phone server…');
     try {
       const Peer = await loadPeer();
-      if (!peer || peer.destroyed) {
-        peer = new Peer(undefined, peerOptions());
-        peer.on('error', (e) => {
-          if (e.type === 'peer-unavailable') { status = 'idle'; showJoin(`Couldn't find room ${code}. Check the code on the big screen, and that it's still open.`); }
-          else if (status !== 'connected') retrySoon();
-        });
-        peer.on('disconnected', () => { if (!peer.destroyed) setTimeout(() => peer.reconnect(), 1500); });
-        await new Promise((res, rej) => { peer.once('open', res); setTimeout(() => rej(new Error('timeout')), 15000); });
-      }
-      conn = peer.connect(ID_PREFIX + code, { reliable: true });
-      conn.on('open', () => { status = 'connected'; conn.send({ t: 'hello', clientId, name }); renderStatus('Connected! Look at the big screen.'); });
+      peer = new Peer(undefined, peerOptions());
+      peer.on('error', (e) => {
+        if (mine !== attempt) return;
+        if (e.type === 'peer-unavailable') { cleanup(); status = 'idle'; showJoin(`Couldn't find room ${code}. Check the code on the big screen, and that it's still open.`); }
+        else if (status !== 'connected') retrySoon(e.type);
+      });
+      peer.on('disconnected', () => { if (peer && !peer.destroyed && status === 'connected') setTimeout(() => peer && !peer.destroyed && peer.reconnect(), 1500); });
+      await new Promise((res, rej) => { peer.once('open', res); setTimeout(() => rej(new Error('server timeout')), 12000); });
+      if (mine !== attempt) return;
+      renderStatus('Found the room — connecting to the big screen…');
+      // JSON is the most compatible way to send data (some Android browsers
+      // stall with PeerJS's default binary packing).
+      conn = peer.connect(ID_PREFIX + code, { reliable: true, serialization: 'json' });
+      openTimer = setTimeout(() => { if (mine === attempt && status !== 'connected') retrySoon('timeout'); }, 12000);
+      conn.on('open', () => {
+        if (mine !== attempt) return;
+        clearTimeout(openTimer);
+        status = 'connected'; fails = 0;
+        conn.send({ t: 'hello', clientId, name });
+        renderStatus('Connected! Look at the big screen.');
+      });
       conn.on('data', (m) => { if (m && m.t === 'state') { state = m; render(); } });
-      conn.on('close', () => { if (status === 'connected') { status = 'lost'; retrySoon(); } });
-    } catch { retrySoon(); }
+      conn.on('error', () => { if (mine === attempt && status !== 'connected') retrySoon('conn'); });
+      conn.on('close', () => { if (mine === attempt && status === 'connected') { status = 'lost'; state = null; retrySoon('lost'); } });
+    } catch { if (mine === attempt) retrySoon('server'); }
   }
   let retryTimer = null;
   function retrySoon() {
     clearTimeout(retryTimer);
-    renderStatus('Reconnecting…');
-    retryTimer = setTimeout(connect, 2500);
+    clearTimeout(openTimer);
+    status = 'retrying';
+    fails++;
+    renderStatus(fails >= 2 ? 'Still trying to reach the big screen…' : 'Reconnecting…', fails >= 2);
+    retryTimer = setTimeout(connect, Math.min(8000, 1500 + fails * 1000));
   }
-  function renderStatus(text) {
+  function renderStatus(text, help = false) {
     if (state && status === 'connected') return;
-    app.innerHTML = `<div class="screen center"><div class="title-noah">${drawNoah(1, { size: 100 })}</div><p class="tagline">${esc(text)}</p></div>`;
+    app.innerHTML = `<div class="screen center"><div class="title-noah">${drawNoah(1, { size: 100 })}</div><p class="tagline">${esc(text)}</p>
+      ${help ? `<div class="note" style="max-width:340px;margin-top:14px;text-align:left">
+        <b>Having trouble?</b><br>• Put this phone on the <b>same Wi-Fi</b> as the big screen (not mobile data).<br>• Open the link in <b>Chrome</b> (or Safari), not inside the camera or Lens app — tap ⋮ → “Open in Chrome”.<br>• Check the code: <b>${esc(code)}</b>.</div>
+        <div class="row" style="margin-top:14px"><button class="btn primary" id="tryagain">Try again now</button><button class="btn small ghost link" id="changename">Change name</button></div>` : ''}</div>`;
+    const ta = $('#tryagain'); if (ta) ta.onclick = () => connect();
+    const cn = $('#changename'); if (cn) cn.onclick = () => { clearTimeout(retryTimer); cleanup(); attempt++; fails = 0; status = 'idle'; showJoin(); };
   }
   const send = (m) => { try { conn?.open && conn.send(m); } catch {} };
 
@@ -82,6 +117,7 @@ export function startPhone(code) {
     const q = s.q;
     if (q && q.key !== lastKey) { lastKey = q.key; myVote = null; }
     if (s.you?.vote) myVote = s.you.vote;
+    if (q && q.answered && q.result && soundedKey !== q.key) { soundedKey = q.key; q.result.right ? Sound.good() : Sound.bad(); }
     const hud = s.hud ? `<div class="p-hud">
       <div class="p-noah">${drawNoah(s.hud.level, { size: 46 })}</div>
       <div class="p-bars"><div class="p-where">${esc(s.hud.map)} · Lv ${s.hud.level}</div>
@@ -133,6 +169,7 @@ export function startPhone(code) {
     app.innerHTML = `<div class="phone">${hud}${body}</div>`;
     app.onclick = (e) => {
       const z = e.target.closest('.zone');
+      if (z || e.target.closest('#usemine, .pbtn')) Sound.click();
       if (z) { myVote = { i: +z.dataset.i, c: +z.dataset.c }; send({ t: 'vote', key: state.q.key, ...myVote }); navigator.vibrate?.(15); return render(); }
       if (e.target.closest('#usemine')) { send({ t: 'useMine' }); navigator.vibrate?.(15); return; }
       const b = e.target.closest('.pbtn');

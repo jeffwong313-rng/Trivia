@@ -11,7 +11,13 @@ const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // no I or O (they look like 1 and
 
 export function peerOptions() {
   const p = new URLSearchParams(location.search).get('peer');
-  const base = { debug: 0, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] } };
+  // STUN finds each device's address; the free Open Relay TURN server is a
+  // best-effort fallback for networks where devices can't reach each other directly
+  // (e.g. a phone on mobile data, or Wi-Fi that isolates devices).
+  const base = { debug: 0, config: { iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+  ] } };
   if (!p) return base;
   const [host, port] = p.split(':');
   return { ...base, host, port: +port || 9000, path: '/', secure: false };
