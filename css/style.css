@@ -103,7 +103,7 @@ button:disabled { cursor: not-allowed; }
 .tagline { font-size: 1.25rem; color: var(--ink-soft); max-width: 30ch; text-align: center; }
 .title-noah { animation: drift 6s ease-in-out infinite; margin: 6px 0 4px; }
 @keyframes drift { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-10px) rotate(1deg); } }
-.noah .balloon { transform-origin: 136px 150px; animation: sway 4s ease-in-out infinite; }
+.noah .balloon { transform-origin: 135px 188px; animation: sway 4s ease-in-out infinite; }
 @keyframes sway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
 .noah .mote { animation: twinkle 3s ease-in-out infinite; }
 @keyframes twinkle { 0%,100% { opacity: .2; } 50% { opacity: .9; } }
@@ -393,3 +393,62 @@ table.lb tr.me td { background: #fff4d6; }
 @media (min-width: 1700px) { #app { zoom: 1.3; } .toast { zoom: 1.3; } }
 @media (min-width: 2400px) { #app { zoom: 1.75; } .toast { zoom: 1.75; } }
 @media (max-width: 860px) { .lobby-grid { grid-template-columns: 1fr; } .conf-legend small { display: none; } }
+
+/* ── Opening story ─────────────────────────────────────────── */
+.story { position: fixed; inset: 0; z-index: 5; background: #fbf8f2; overflow: hidden; }
+.story-scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+.story-boy { animation: breathe 4.5s ease-in-out infinite; }
+@keyframes breathe { 0%,100% { opacity: 1; } 50% { opacity: .82; } }
+.story-balloon { animation: sway 5s ease-in-out infinite; transform-origin: 452px 285px; }
+.story-white { position: absolute; inset: 0; background: #fff; pointer-events: none; opacity: 0; animation: whiteOut 4.2s ease-in-out both; }
+@keyframes whiteOut { 0%, 30% { opacity: 1; } 100% { opacity: 0; } }
+.story-text { position: absolute; left: 0; right: 0; top: 11%; text-align: center; padding: 0 16px; font-family: var(--script); font-size: clamp(1.8rem, 4.6vw, 3rem); color: var(--ink); line-height: 1.25; pointer-events: none; }
+.story-text p { animation: inkIn 1.6s ease both; text-shadow: 0 0 12px #fbf8f2, 0 0 4px #fbf8f2; }
+.story-text .l1 { animation-delay: 4.6s; }
+.story-text .l2 { animation-delay: 7.2s; color: var(--ink-soft); }
+@keyframes inkIn { from { opacity: 0; filter: blur(3px); transform: translateY(6px); } to { opacity: 1; filter: none; transform: none; } }
+.story-skip { position: absolute; top: 14px; right: 16px; z-index: 2; color: var(--ink-soft); animation: inkIn 1s ease 1s both; }
+.story-go { position: absolute; left: 0; right: 0; bottom: 4%; display: flex; justify-content: center; animation: inkIn 1.2s ease 9.4s both; }
+
+/* ── Tutorial ──────────────────────────────────────────────── */
+.tutorial .tut-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tutorial .lv-head svg { height: 150px; }
+.tutorial p { margin-bottom: 6px; }
+.tut-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 6px; }
+.tut-stat { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; }
+.tut-letter { flex: none; width: 38px; height: 38px; display: grid; place-items: center; font-family: var(--script); font-size: 1.8rem; color: var(--red); border: 1.8px solid var(--ink); border-radius: 50% 45% 52% 48%; background: #fffdf8; }
+.tut-stat .name { font-family: var(--script); font-size: 1.45rem; line-height: 1; }
+.tut-stat .blurb { font-size: .92rem; }
+.tut-when { font-size: .85rem; color: var(--ink-soft); margin-top: 2px; }
+.tut-list { padding-left: 1.2em; display: grid; gap: 8px; }
+.tut-dots { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.tut-dots span { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); }
+.tut-dots span.on { background: var(--red); border-color: var(--red); }
+.tutorial .lockrow { justify-content: space-between; }
+
+/* ── Topics: "All set" at the top ──────────────────────────── */
+.all-set { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 4px 0 18px; padding-bottom: 16px; border-bottom: 1.5px dashed var(--graphite); }
+.big-go { font-size: 1.3rem; padding: .5em 1.4em; }
+
+/* ── Settings ──────────────────────────────────────────────── */
+.choice.setting .big { font-size: 1.6rem; }
+.vol-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin-top: 14px; max-width: 460px; }
+.vol-row input[type=range] { width: 100%; accent-color: var(--red); }
+
+/* ── Flag a question ───────────────────────────────────────── */
+.flag-box { margin-top: 14px; padding: 12px 14px; }
+.flag-box h3 { font-size: 1.6rem; margin-bottom: 2px; }
+.flag-reasons { justify-content: flex-start; margin: 10px 0; }
+.flag-box input[type=text] { width: 100%; }
+
+/* ── Flagged questions review ──────────────────────────────── */
+.feedback .fb-card { padding: 12px 14px; margin: 12px 0; }
+.feedback .fb-card.removed { opacity: .65; }
+.fb-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.fb-head code, .fb-export code { font-size: .8rem; background: rgba(255,255,255,.6); padding: 0 4px; border-radius: 4px; }
+.fb-q { font-size: 1.15rem; margin-bottom: 4px; }
+.fb-note { font-style: italic; color: var(--ink-soft); margin-top: 4px; }
+.fb-actions { justify-content: flex-start; margin-top: 8px; }
+.fb-export textarea { width: 100%; margin-top: 8px; font: .8rem/1.3 ui-monospace, monospace; padding: 6px; border: 1.5px solid var(--graphite); border-radius: 6px; background: #fffdf8; }
+.hud-actions { flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; }
+.hud-actions .btn { white-space: nowrap; padding: .3em .35em; }
