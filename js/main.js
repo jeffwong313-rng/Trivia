@@ -444,7 +444,7 @@ function showTopics() {
             ${g.topics.map((t) => `<button class="topic ${st.topics.has(t.id) ? 'on' : ''}" data-topic="${t.id}" aria-pressed="${st.topics.has(t.id)}" data-rlabel="${t.name}"><span class="check">${st.topics.has(t.id) ? '✓' : ''}</span>${t.name}</button>`).join('')}
           </div>
         </section>`).join('')}
-        <p class="note">${st.topics.size} of ${ALL_TOPIC_IDS.length} topics on. Online, most knowledge topics draw from thousands of Open Trivia DB questions (overly specific ones are filtered out); brain teasers are made fresh every time.</p>
+        <p class="note">${st.topics.size} of ${ALL_TOPIC_IDS.length} topics on. Questions come from your reviewed question bank${source.bankCount ? ` (${source.bankCount.toLocaleString()} questions)` : ''}; when a topic runs low, Open Trivia DB tops it up online (skipping anything the review cut). Brain teasers are made fresh every time.</p>
         <div class="row" style="margin-top:22px">
           <button class="btn" data-act="back">Back</button>
           <button class="btn primary" data-act="go" ${st.topics.size ? '' : 'disabled'}>Set off ➜</button>
@@ -463,6 +463,10 @@ function showTopics() {
     else if (t.dataset.groupNone) { groupOf(t.dataset.groupNone).forEach((id) => st.topics.delete(id)); saveSetup(); refocus(`[data-group-none="${t.dataset.groupNone}"]`); }
     else if (t.dataset.act === 'back') showSetup();
     else if (t.dataset.act === 'go' && st.topics.size) {
+      if (!source.bankLoaded) {   // first load of the question bank can take a moment
+        t.disabled = true; t.textContent = 'Loading questions…';
+        return source.ready.then(() => { t.disabled = false; t.click(); });
+      }
       const party = partyById(st.size);
       game.newRun({ partySize: st.size, mode: st.mode, partyName: st.party.trim(), players: st.names.slice(0, party.names).map((n) => n.trim()).filter(Boolean), topics: [...st.topics] });
       startJourney();
