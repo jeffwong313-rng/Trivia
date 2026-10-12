@@ -40,6 +40,10 @@ A cooperative trivia adventure. Noah is a lost little boy, about six — at firs
 
 Phones connect straight to the TV page with WebRTC via PeerJS's free public broker (no accounts or server to run). If a phone can't connect within ~20 seconds it starts over automatically, and after two misses shows tips and a **Try again** button. Phones work best on the same Wi-Fi as the big screen, opened in Chrome or Safari (not inside the camera / Lens app). A keyboard or TV remote also works: arrows move, Enter selects, 1–4 picks an answer (press again to change how sure). Several STUN servers are tried, and the phone's "Having trouble?" screen shows the last error. On networks that block direct connections, add your own relay with `?turn=turn:host:3478,user,password` (remembered on that device).
 
+## Smart-TV browsers
+
+Samsung and LG TV browsers run older versions of Chrome, which can't read modern JavaScript. The page therefore loads `js/app.js` / `css/app.css`, a bundled copy of the source down-levelled to Chrome 56, and PeerJS is down-levelled too (`js/vendor/peerjs.legacy.js`). **After editing anything in `js/` or `css/style.css`, run `npm i -D esbuild@0.24 && node tools/build.mjs`** (or ask Claude to rebuild). If a TV is too old even for that, the page shows a message instead of a blank screen; use a laptop on HDMI or cast a Chrome tab instead.
+
 ## Test mode
 
 Click either "a" in the title 10 times in a row. Every question becomes "Questions: Testing in progress" (A = Answer, B–D = Wrong). Test runs stay off the leaderboard. Same again to turn it off.
@@ -51,7 +55,10 @@ Every number lives in **`js/config.js`**: party scaling, modes, tier EXP/damage,
 ## Files
 
 ```
-index.html          page shell
+index.html          page shell (loads the built js/app.js + css/app.css)
+js/app.js, css/app.css   BUILT files — run `node tools/build.mjs` after editing js/*.js or css/style.css
+tools/build.mjs     bundles + down-levels the code so older smart-TV browsers (Samsung, LG) can run it
+js/polyfills.js     small polyfills added to js/app.js
 css/style.css       paper-and-pencil look (scales up on TVs)
 js/config.js        all the numbers + topic list
 js/game.js          rules and run state

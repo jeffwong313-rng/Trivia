@@ -10,13 +10,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
   <div id="defs"></div>
   <div class="paper"></div>
   <main id="app" aria-live="polite"></main>
   <noscript>Noah needs JavaScript to find his way home.</noscript>
-  <script type="module" src="js/main.js"></script>
+  <!-- js/app.js and css/app.css are built from js/*.js and css/style.css by tools/build.mjs,
+       down-levelled so older smart-TV browsers can run the game. -->
+  <script>
+    // If the game can't start on this browser (e.g. a very old smart TV), say so instead of showing a blank page.
+    window.addEventListener('error', function (e) {
+      var app = document.getElementById('app');
+      if (app && !app.children.length) app.innerHTML = '<div style="max-width:560px;margin:15vh auto;padding:24px;text-align:center;font:20px/1.4 sans-serif;color:#2c2723">' +
+        '<h1 style="font-size:32px;margin-bottom:12px">Noah can\'t start on this browser</h1>' +
+        '<p>This TV\'s browser is too old for the game. Try opening it on a laptop connected to the TV, or cast a Chrome tab.</p>' +
+        '<p style="margin-top:16px;font-size:14px;color:#8b8478">' + String(e.message || 'Script error').replace(/</g, '&lt;') + '</p></div>';
+    });
+  </script>
+  <script src="js/app.js" defer></script>
 </body>
 </html>
