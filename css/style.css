@@ -505,3 +505,7 @@ body.boss-mode .boss-name { color: var(--red); text-shadow: 0 0 14px rgba(224,88
 body.boss-mode .answer .key { background: var(--paper-2); }
 body.boss-mode .boss.waver { filter: drop-shadow(0 0 16px rgba(160,60,200,.35)); }
 body.boss-mode input[type=text] { background: var(--card); }
+
+.reveal-ans{margin:6px 0 2px}
+.explain{margin:6px 0;line-height:1.35;font-size:.95em}
+a.learn{display:inline-block;margin:6px 0 2px;padding:6px 12px;border:2px solid var(--ink);border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600;background:var(--card-hi)}

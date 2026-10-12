@@ -5,7 +5,7 @@ import { SVG_DEFS, drawNoah, drawBoss, drawShape, drawMap, drawVisual, drawSwatc
 import { Sound, Settings, setBossTheme } from './audio.js';
 import { Feedback, FLAG_REASONS, reasonLabel } from './feedback.js';
 import { REMOVED } from './removed.js';
-import { QuestionSource, answerText } from './questions.js';
+import { QuestionSource, answerText, learnUrl } from './questions.js';
 import { Game } from './game.js';
 import { Room, joinUrl } from './remote.js';
 import { startPhone } from './phone.js';
@@ -827,7 +827,9 @@ function resultHTML() {
   const last = r.defeat ? 'See what happened' : s.boss && s.boss.asked >= 5 ? 'Finish the boss' : 'Continue';
   return `<div class="result ${r.right ? 'good' : 'bad'}"><h3>${title}</h3>
     ${r.two ? `<div class="small muted">Second Guess: ${r.picked.map(letter).join(' and ')} locked in together.</div>` : ''}
-    ${!r.right ? `<div>The answer was <b>${esc(answerText(s.q.q.answers[r.correctIndex]) || 'option ' + letter(r.correctIndex))}</b>.</div>` : ''}
+    <div class="reveal-ans">${r.right ? 'Answer' : 'The answer was'}: <b>${esc(answerText(s.q.q.answers[r.correctIndex]) || 'option ' + letter(r.correctIndex))}</b></div>
+    ${s.q.q.explain ? `<p class="explain">${esc(s.q.q.explain)}</p>` : ''}
+    ${learnUrl(s.q.q) ? `<a class="learn" href="${learnUrl(s.q.q)}" target="_blank" rel="noopener" data-rlabel="Learn more on Google">🔎 Learn more on Google</a>` : ''}
     <div class="fx">${fx.join('')}</div></div>
     <div class="lockrow"><button class="btn primary" data-act="next">${last} ➜</button></div>`;
 }
@@ -1165,7 +1167,7 @@ function remoteState() {
     base.q = {
       key: cq.key, prompt: q.prompt, topic: q.topicName || TOPICS[cq.topic]?.name, subtopic: q.subtopic, tier: cq.tier, visual: q.visual || null,
       answers: q.answers, removed: cq.removed, hints: game.hints(), boss: s.boss ? { name: s.boss.name, asked: s.boss.asked, mistakes: s.boss.mistakes } : null,
-      answered, chosen: cq.answered, conf: cq.conf, correct: answered ? q.correct : null, result: answered && ui.result ? { right: ui.result.right, exp: ui.result.exp, dmg: ui.result.dmg } : null,
+      answered, chosen: cq.answered, conf: cq.conf, correct: answered ? q.correct : null, result: answered && ui.result ? { right: ui.result.right, exp: ui.result.exp, dmg: ui.result.dmg, answer: answerText(q.answers[q.correct]), explain: q.explain || '', learn: learnUrl(q) } : null,
       team: ui.sels, need: game.picksNeeded(), ready: ready(), revealed: ui.revealed, votes: ui.revealed ? [...ui.votes.entries()].map(([id, v]) => ({ id, ...v })) : null,
       voted: [...ui.votes.keys()], picked: cq.picked || null,
     };
