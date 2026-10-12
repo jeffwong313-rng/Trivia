@@ -94,7 +94,7 @@ export class QuestionSource {
 
   async loadBank() {
     try {
-      const data = await (await fetch(new URL('./bank.json', import.meta.url))).json();
+      const data = await (await fetch(new URL('js/bank.json', document.baseURI).href)).json();
       const ids = new Set();
       for (const [ti, tier, prompt, correct, ...rest] of data.q) {
         const topic = TOPIC_BY_NAME[String(data.topics[ti]).toLowerCase()];

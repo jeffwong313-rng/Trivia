@@ -43,7 +43,7 @@ export function loadPeer() {
   if (peerLib) return peerLib;
   peerLib = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = new URL('./vendor/peerjs.min.js', import.meta.url).href;
+    s.src = new URL('js/vendor/peerjs.legacy.js', document.baseURI).href;
     s.onload = () => (window.Peer ? resolve(window.Peer) : reject(new Error('PeerJS missing')));
     s.onerror = () => reject(new Error('Could not load PeerJS'));
     document.head.appendChild(s);
@@ -56,7 +56,7 @@ function loadQr() {
   if (qrLib) return qrLib;
   qrLib = new Promise((resolve) => {
     const s = document.createElement('script');
-    s.src = new URL('./vendor/qrcode.js', import.meta.url).href;
+    s.src = new URL('js/vendor/qrcode.js', document.baseURI).href;
     s.onload = () => resolve(window.qrcode);
     s.onerror = () => resolve(null);
     document.head.appendChild(s);

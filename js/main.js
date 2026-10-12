@@ -1158,8 +1158,10 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
-document.addEventListener('mousedown', () => { ui.kbd = false; });
-document.addEventListener('touchstart', () => { ui.kbd = false; }, { passive: true });
+document.addEventListener('mousedown', () => { ui.kbd = false; document.body.classList.remove('kbd'); });
+document.addEventListener('touchstart', () => { ui.kbd = false; document.body.classList.remove('kbd'); }, { passive: true });
+// Older TV browsers don't know :focus-visible, so show the focus ring via a class
+document.addEventListener('keydown', (e) => { if (e.key.startsWith('Arrow') || e.key === 'Tab') document.body.classList.add('kbd'); }, true);
 
 // ── Mirror the screen to phones ───────────────────────────────
 // Every enabled button in the top layer becomes a button on each phone, so
