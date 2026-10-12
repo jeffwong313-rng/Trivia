@@ -4,10 +4,12 @@
 import { answerText } from './questions.js';
 
 const KEY = 'noah_explain_url', CACHE = 'noah_explain_cache';
+// Built-in Worker, used on every device unless Settings or ?explain= gives another one.
+export const DEFAULT_EXPLAIN_URL = 'https://noah-explain.jeffwong313.workers.dev';
 export function explainUrl() {
   let u = new URLSearchParams(location.search).get('explain');
   try { if (u) localStorage.setItem(KEY, u); else u = localStorage.getItem(KEY); } catch {}
-  return /^(https:\/\/|http:\/\/localhost)/.test(u || '') ? u : '';
+  return /^(https:\/\/|http:\/\/localhost)/.test(u || '') ? u : DEFAULT_EXPLAIN_URL;
 }
 export function setExplainUrl(u) { try { u ? localStorage.setItem(KEY, u.trim()) : localStorage.removeItem(KEY); } catch {} }
 

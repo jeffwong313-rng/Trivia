@@ -244,8 +244,8 @@ function showSettings() {
         </section>
         <section data-rsection="Auto explanations">
           <h3>Auto explanations</h3>
-          <p class="small muted">Optional. Paste your explanation Worker's address to get a short "why" after each answer (see worker/README.md). Needs internet.</p>
-          <input type="text" id="explain-url" placeholder="https://noah-explain.yourname.workers.dev" value="${esc(explainUrl())}" autocomplete="off" style="width:100%;max-width:520px">
+          <p class="small muted">A short "why" appears after each answer (needs internet). Uses the built-in Worker; paste a different address here to override it, or clear the box to go back to the default.</p>
+          <input type="text" id="explain-url" placeholder="https://noah-explain.jeffwong313.workers.dev" value="${esc(explainUrl())}" autocomplete="off" style="width:100%;max-width:520px">
         </section>
         <div class="row" style="margin-top:22px"><button class="btn primary" data-act="back">Done</button></div>
       </div>
