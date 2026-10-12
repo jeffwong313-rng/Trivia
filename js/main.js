@@ -1,11 +1,11 @@
 // Screens and interaction. One shared screen (a laptop or a TV); phones can
 // join as controllers. The whole party plays as one.
-import { TITLE, MODES, PARTIES, CONFIDENCE, STATS, SKILLS, MAPS, NOAH_TIERS, TIERS, TOPIC_GROUPS, TOPICS, ALL_TOPIC_IDS, statFx, partyById } from './config.js';
+import { TITLE, MODES, PARTIES, CONFIDENCE, STATS, SKILLS, MAPS, NOAH_TIERS, TIERS, TOPIC_GROUPS, TOPICS, ALL_TOPIC_IDS, LIVE_PICKS, statFx, partyById } from './config.js';
 import { SVG_DEFS, drawNoah, drawBoss, drawShape, drawMap, drawVisual, drawSwatch, drawStoryScene, nodeXY, noahTier } from './art.js';
-import { Sound, Settings } from './audio.js';
+import { Sound, Settings, setBossTheme } from './audio.js';
 import { Feedback, FLAG_REASONS, reasonLabel } from './feedback.js';
 import { REMOVED } from './removed.js';
-import { QuestionSource, answerText } from './questions.js';
+import { QuestionSource, answerText, learnUrl } from './questions.js';
 import { Game } from './game.js';
 import { Room, joinUrl } from './remote.js';
 import { startPhone } from './phone.js';
@@ -29,10 +29,10 @@ const source = new QuestionSource();
 const game = new Game(source);
 const savedSetup = store.get('noah_setup', {});
 const ui = {
-  sel: null, result: null, kbd: false, lastMapScroll: null,
+  sels: [], result: null, kbd: false, lastMapScroll: null,
   setup: { size: savedSetup.size || 1, mode: savedSetup.mode || 'standard', names: ['', '', '', '', '', '', '', ''], party: savedSetup.party || '',
     topics: new Set((savedSetup.topics || ALL_TOPIC_IDS).filter((t) => TOPICS[t])) },
-  room: null, votes: new Map(), voteKey: null, revealed: false, rv: 0,
+  room: null, votes: new Map(), voteKey: null, revealed: LIVE_PICKS, forced: false, rv: 0,
 };
 if (!ui.setup.topics.size) ui.setup.topics = new Set(ALL_TOPIC_IDS);
 const saveSetup = () => store.set('noah_setup', { size: ui.setup.size, mode: ui.setup.mode, party: ui.setup.party, topics: [...ui.setup.topics] });
@@ -54,6 +54,7 @@ const letter = (i) => 'ABCD'[i];
 
 // ── Title ─────────────────────────────────────────────────────
 function showTitle() {
+  setBossTheme(false);
   const save = Game.hasSave();
   app.innerHTML = `
   <div class="screen center">
@@ -70,7 +71,7 @@ function showTitle() {
       <button class="btn small ghost link" data-act="joincode">📱 Join a game on this phone</button>
       <div class="row">
         <button class="btn small ghost link" data-act="how">How to play</button>
-        <button class="btn small ghost link" data-act="board">Leaderboard</button>
+        <button class="btn small ghost link" data-act="board">🏆 Leaderboard</button>
         <button class="btn small ghost link" data-act="settings">Settings</button>
         <button class="btn small ghost link" data-act="feedback">Flagged questions${Feedback.pending() ? ` (${Feedback.pending()})` : ''}</button>
       </div>
@@ -138,9 +139,9 @@ function showHow() {
         <li><b>No timer.</b> Take your time. Answering quickly earns a small score bonus, which fades away at 2 minutes.</li>
         <li><b>Pick a path.</b> Usually three paths at every step. <i>Perception</i> clears the fog and shows each path's topic, then its difficulty.</li>
         <li><b>Level up.</b> One stat point per level. Every 4 levels, learn or upgrade a skill. Noah's drawing fills in as he grows.</li>
-        <li><b>⚑ Flag question</b> if it's too niche, incomplete, or wrong. It's removed from the game, saved under <i>Flagged questions</i> on the title screen for review, and you get a free reroll.</li>
+        <li><b>⚑ Flag question</b> if it's too niche, incomplete, or wrong. It's removed from the game, saved under <i>Flagged questions</i> on the title screen for review, and you get a fresh question on the same topic, free.</li>
         <li><b>Bosses</b> wait at the top of each map: 5 questions. Save your mana for them.</li>
-        <li><b>Phones + TV:</b> on the big screen choose "Play on a TV with phones", then scan the code (or tap "Join a game on this phone" and type it). Everyone reads the question and picks privately, then the picks are revealed so you can discuss. Phones can also press every button on the big screen, so a TV with no mouse works fine.</li>
+        <li><b>Phones + TV:</b> on the big screen choose "Play on a TV with phones", then scan the code (or tap "Join a game on this phone" and type it). Everyone reads the question and taps an answer; picks show live on the TV. When everyone is in, anyone can choose an answer for the team and lock it in from their phone. Phones can also press every button on the big screen, so a TV with no mouse works fine.</li>
         <li><b>Keyboard / TV remote:</b> arrow keys move, Enter selects. Keys 1–4 pick an answer (press again to change how sure).</li>
       </ul>
     </div>
@@ -150,20 +151,61 @@ function showHow() {
   focusFirst();
 }
 
+const modeIdOf = (r) => r.modeId || Object.entries(MODES).find(([, m]) => m.name === r.mode)?.[0] || 'standard';
 function showBoard(highlight) {
-  const rows = Game.leaderboard();
+  const f = (ui.boardFilter ||= { mode: 'all', size: 'all' });
+  const all = Game.leaderboard();
+  const rows = all.filter((r) => (f.mode === 'all' || modeIdOf(r) === f.mode) && (f.size === 'all' || String(r.size) === f.size));
+  const mins = (ms) => (ms ? (ms < 90000 ? '<2 min' : `${Math.round(ms / 60000)} min`) : '–');
+  const chip = (kind, val, label) => `<button class="btn small ${f[kind] === val ? 'primary' : ''}" data-f-${kind}="${val}" data-rlabel="${label}${f[kind] === val ? ' (on)' : ''}">${label}</button>`;
+  const line = (r) => {
+    const st = r.stats ? Object.keys(STATS).map((k) => `${k}${r.stats[k] ?? 1}`).join(' ') : '';
+    return `${r.players?.filter(Boolean).length ? esc(r.players.filter(Boolean).join(', ')) : ''}${st ? `${r.players?.filter(Boolean).length ? ' · ' : ''}${st}` : ''}`;
+  };
   app.innerHTML = `
   <div class="screen">
-    <h2 class="page-title">Leaderboard</h2>
-    <p class="muted" style="margin-bottom:12px">Ranked by how far you got, with a little extra for speed. Saved on this device.</p>
+    <h2 class="page-title">🏆 Leaderboard</h2>
+    <p class="muted" style="margin-bottom:10px">Every journey that ends is saved here with its squad, players, score, difficulty and stats. Ranked by score (how far you got, plus a little for speed). Kept on this device.</p>
+    ${all.length ? `<div class="lb-filters" data-rsection="Filter">
+      <div class="row small">${chip('mode', 'all', 'Any difficulty')}${Object.entries(MODES).map(([k, m]) => chip('mode', k, m.name)).join('')}</div>
+      <div class="row small">${chip('size', 'all', 'Any size')}${PARTIES.map((p) => chip('size', String(p.id), p.name)).join('')}</div>
+    </div>` : ''}
     ${rows.length ? `<div class="sk lb-wrap"><table class="lb">
-      <tr><th>#</th><th>Party</th><th>Size</th><th>Mode</th><th>Reached</th><th>Lv</th><th>Score</th></tr>
-      ${rows.map((r, i) => `<tr class="${highlight && r.date === highlight.date ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.party)}${r.players?.filter(Boolean).length ? `<div class="small muted">${esc(r.players.filter(Boolean).join(', '))}</div>` : ''}</td><td>${esc(r.sizeName || partyById(r.size).name)}</td><td>${esc(r.mode)}</td><td>${r.outcome === 'victory' ? 'Home! ✦' : esc(r.reached)}</td><td>${r.level}</td><td><b>${r.score.toLocaleString()}</b></td></tr>`).join('')}
-    </table></div>` : '<p class="note">No journeys yet.</p>'}
-    <button class="btn" style="margin-top:20px" data-act="back">Back</button>
+      <tr><th>#</th><th>Squad</th><th>Size</th><th>Difficulty</th><th>Reached</th><th>Lv</th><th>Right</th><th>Time</th><th>Score</th></tr>
+      ${rows.map((r, i) => `<tr class="${highlight && (r.id ? r.id === highlight.id : r.date === highlight.date) ? 'me' : ''}"><td>${i + 1}</td><td><b>${esc(r.party)}</b><div class="small muted">${line(r)}</div><div class="small muted">${new Date(r.date).toLocaleDateString()}</div></td><td>${esc(r.sizeName || partyById(r.size).name)}</td><td>${esc(r.mode)}</td><td>${r.outcome === 'victory' ? 'Home! ✦' : esc(r.reached)}<div class="small muted">${r.maps} map${r.maps === 1 ? '' : 's'} cleared</div></td><td>${r.level}</td><td>${r.correct}${r.wrong != null ? `<div class="small muted">${Math.round((100 * r.correct) / Math.max(1, r.correct + r.wrong))}%</div>` : ''}</td><td>${mins(r.activeMs)}</td><td><b>${r.score.toLocaleString()}</b></td></tr>`).join('')}
+    </table></div>`
+      : all.length ? '<p class="note">Nothing matches those filters.</p>' : '<p class="note">No journeys yet. When a journey ends (Noah gets home, or fades), the squad and score land here.</p>'}
+    <div class="row" style="margin-top:18px">
+      <button class="btn" data-act="back">Back</button>
+      ${all.length ? '<button class="btn small ghost link no-remote" data-act="export">Download a copy</button><button class="btn small ghost link no-remote" data-act="copyboard">Copy as text</button>' : ''}
+      <button class="btn small ghost link no-remote" data-act="import">Add scores from a copy</button>
+    </div>
+    <div id="import-box" hidden class="note" style="margin-top:10px;width:100%;max-width:640px"><b>Paste a copy of a leaderboard</b> (from “Copy as text” or “Download a copy”). Scores already here are skipped.
+      <textarea id="import-text" rows="5" style="width:100%;margin-top:6px"></textarea>
+      <div class="row" style="margin-top:6px"><button class="btn small primary" data-act="doimport">Add them</button></div></div>
   </div>`;
-  app.onclick = (e) => { if (e.target.closest('[data-act=back]')) showTitle(); };
-  focusFirst();
+  app.oninput = null;
+  app.onclick = async (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.fMode) { f.mode = t.dataset.fMode; return showBoard(highlight); }
+    if (t.dataset.fSize) { f.size = t.dataset.fSize; return showBoard(highlight); }
+    const a = t.dataset.act;
+    if (a === 'back') backFromMenu();
+    else if (a === 'export') {
+      const blob = new Blob([JSON.stringify(Game.leaderboard(), null, 2)], { type: 'application/json' });
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'noah-leaderboard.json'; link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    } else if (a === 'copyboard') {
+      try { await navigator.clipboard.writeText(JSON.stringify(Game.leaderboard(), null, 2)); toast('Copied. Paste it somewhere safe.'); } catch { toast('Couldn\'t copy. Use “Download a copy” instead.'); }
+    } else if (a === 'import') { $('#import-box').hidden = false; $('#import-text').focus(); }
+    else if (a === 'doimport') {
+      const n = Game.importBoard($('#import-text').value.trim());
+      if (n < 0) return toast('That doesn\'t look like a leaderboard copy.');
+      toast(n ? `Added ${n} score${n === 1 ? '' : 's'}.` : 'Nothing new to add.');
+      showBoard(highlight);
+    }
+  };
+  focusFirst('[data-act=back]');
 }
 
 const backFromMenu = () => (game.s && !['victory', 'defeat'].includes(game.s.phase) && app.dataset.from === 'game' ? renderGame() : showTitle());
@@ -308,7 +350,8 @@ async function ensureRoom() {
     onPlayers: () => { refreshPlayerBits(); syncRemote(); },
     onVote: (p, m) => onVote(p, m),
     onAction: (p, m) => onRemoteAction(p, m),
-    onUseMine: (p) => onUseMine(p),
+    onTeam: (p, m) => onTeam(p, m),
+    onSquad: (p, m) => onSquad(m),
     onError: (msg) => toast(msg),
   });
   try { await ui.room.open(); } catch (e) { toast('Couldn\'t open a room for phones. Check the internet connection.'); ui.room = null; }
@@ -359,6 +402,7 @@ function refreshPlayerBits() {
   if (chip && ui.room) chip.innerHTML = `📱 ${ui.room.code} · ${ps.filter((p) => p.connected).length}`;
   const vb = $('#votebar');
   if (vb) vb.outerHTML = voteBarHTML();
+  maybeReady();
 }
 
 // ── Setup ─────────────────────────────────────────────────────
@@ -377,6 +421,11 @@ function showSetup() {
     <div class="screen">
       <div class="setup">
         <h2>Who's walking with Noah?</h2>
+        <section data-rsection="Squad name">
+          <h3>Name your squad</h3>
+          <input type="text" maxlength="28" placeholder="Noah's Friends" data-party data-squad value="${esc(st.party)}">
+          <p class="small muted" style="margin-top:6px">Your squad, its players, score, difficulty and stats are saved to the leaderboard when the journey ends.</p>
+        </section>
         <section data-rsection="Party size">
           <h3>How many friends?</h3>
           <div class="choice-grid party-grid">
@@ -388,7 +437,7 @@ function showSetup() {
             </button>`).join('')}
           </div>
           <div class="names">
-            ${Array.from({ length: party.names }, (_, i) => `<input type="text" maxlength="16" placeholder="Friend ${i + 1} (optional)" data-name="${i}" value="${esc(st.names[i])}">`).join('')}
+            ${Array.from({ length: party.names }, (_, i) => `<input type="text" maxlength="16" placeholder="Player ${i + 1}'s name (optional)" data-name="${i}" value="${esc(st.names[i])}">`).join('')}
           </div>
         </section>
         <section data-rsection="Difficulty">
@@ -396,10 +445,6 @@ function showSetup() {
           <div class="choice-grid">
             ${Object.entries(MODES).map(([k, m]) => `<button class="choice ${st.mode === k ? 'on' : ''}" data-mode="${k}" data-rlabel="${m.name}: ${m.desc}"><div class="big">${m.name}</div><div class="sub">${m.desc}</div></button>`).join('')}
           </div>
-        </section>
-        <section>
-          <h3>Name your party</h3>
-          <input type="text" maxlength="28" placeholder="Noah's Friends" data-party value="${esc(st.party)}">
         </section>
         <p class="note">Everyone plays together as one team: one Noah, one health bar, one answer at a time. There are no turns. Talk it out, then lock it in. A bigger party just means a harder journey.</p>
         <div class="row" style="margin-top:22px">
@@ -468,7 +513,9 @@ function showTopics() {
         return source.ready.then(() => { t.disabled = false; t.click(); });
       }
       const party = partyById(st.size);
-      game.newRun({ partySize: st.size, mode: st.mode, partyName: st.party.trim(), players: st.names.slice(0, party.names).map((n) => n.trim()).filter(Boolean), topics: [...st.topics] });
+      const players = st.names.slice(0, party.names).map((n) => n.trim()).filter(Boolean);
+      for (const p of ui.room?.players || []) if (!players.some((n) => n.toLowerCase() === p.name.toLowerCase())) players.push(p.name);
+      game.newRun({ partySize: st.size, mode: st.mode, partyName: st.party.trim(), players, topics: [...st.topics] });
       startJourney();
     }
   };
@@ -498,6 +545,7 @@ function hudHTML() {
     <div class="hud-actions">
       <button class="btn small ghost link no-remote" data-act="quit">Save & quit</button>
       ${ui.room ? `<button class="btn small ghost link no-remote" id="phone-chip" data-act="showjoin">📱 ${ui.room.code} · ${ui.room.players.filter((p) => p.connected).length}</button>` : `<button class="btn small ghost link no-remote" data-act="addphones">📱 Phones</button>`}
+      <button class="btn small ghost link no-remote" data-act="boardin" title="Leaderboard">🏆</button>
       <button class="btn small ghost link no-remote" data-act="howin">Help</button>
       <button class="btn small ghost link no-remote" data-act="settingsin" title="Settings">⚙</button>
     </div>
@@ -505,9 +553,12 @@ function hudHTML() {
 }
 const refreshHud = () => { const hud = $('.hud'); if (hud) hud.outerHTML = hudHTML(); };
 
+// The boss fight turns the page dark (and the sounds darker); everything else is the light paper
+function applyTheme() { setBossTheme(!!(game.s && game.s.boss && app.dataset.from === 'game' && !['victory', 'defeat'].includes(game.s.phase))); }
 function renderGame() {
   const s = game.s;
   app.dataset.from = 'game';
+  applyTheme();
   if (s.phase === 'defeat' || s.phase === 'victory') return showEnd();
   const sel = game.choices();
   const mapSvg = drawMap(s.map, { ...game.sight, selectable: sel });
@@ -545,12 +596,13 @@ function onGameClick(e) {
   const node = e.target.closest('.node.selectable');
   if (node && game.s.phase === 'map') {
     game.moveTo(node.dataset.id);
-    ui.sel = null; ui.result = null;
+    ui.sels = []; ui.result = null;
     return renderGame();
   }
   const a = e.target.closest('[data-act]')?.dataset.act;
   if (a === 'quit') { game.save(); app.dataset.from = ''; showTitle(); }
   if (a === 'howin') showHow();
+  if (a === 'boardin') showBoard();
   if (a === 'settingsin') showSettings();
   if (a === 'showjoin') showJoinModal();
   if (a === 'addphones') ensureRoom().then((r) => { if (r) { refreshHud(); showJoinModal(); } });
@@ -590,10 +642,13 @@ function answerHTML(a) {
 }
 const answerLabel = (a, i) => `${letter(i)}: ${typeof a === 'string' ? a : a.text || 'shape ' + letter(i)}`;
 
-// Phone votes for the current question
+// Phone picks for the current question. Every phone's pick shows on the big
+// screen (and on every phone) as it's made. When every connected phone has
+// picked, the team is "ready": anyone can then choose an answer for the team and
+// lock it in, whether or not everyone agrees.
 function syncVoteKey() {
   const key = game.s?.q?.key || null;
-  if (key !== ui.voteKey) { ui.voteKey = key; ui.votes = new Map(); ui.revealed = false; ui.flagging = false; }
+  if (key !== ui.voteKey) { ui.voteKey = key; ui.votes = new Map(); ui.revealed = LIVE_PICKS; ui.forced = false; ui.flagging = false; ui.sels = []; }
 }
 function connectedPlayers() { return ui.room ? ui.room.players.filter((p) => p.connected) : []; }
 function votesAt(i, c) { return [...ui.votes.entries()].filter(([, v]) => v.i === i && (c === undefined || v.c === c)).map(([id]) => ui.room?.players.find((p) => p.id === id)).filter(Boolean); }
@@ -601,40 +656,77 @@ function chipsHTML(i, c) {
   if (!ui.revealed) return '';
   return votesAt(i, c).map((p) => `<span class="vchip" style="background:${p.color}" title="${esc(p.name)}">${esc(p.name.slice(0, 1).toUpperCase())}</span>`).join('');
 }
+const everyoneIn = () => { const ps = connectedPlayers(); return ps.length > 0 && ps.every((p) => ui.votes.has(p.id)); };
+const ready = () => ui.forced || everyoneIn();
+// How many answers the team locks in: one, or two while Second Guess is armed
+const maxPicks = () => (game.s?.q ? game.picksNeeded() : 1);
+// The team answer(s): choosing replaces the old one, except while Second Guess
+// is armed, when two can be held at once (tap a chosen zone again to drop it).
+function chooseTeam(i, c) {
+  const need = maxPicks();
+  if (need === 1) { ui.sels = [{ i, c }]; return; }
+  const at = ui.sels.findIndex((x) => x.i === i);
+  if (at >= 0) { if (ui.sels[at].c === c) ui.sels.splice(at, 1); else ui.sels[at] = { i, c }; }
+  else { ui.sels.push({ i, c }); if (ui.sels.length > need) ui.sels.shift(); }
+}
+const teamLabel = () => ui.sels.map((x) => `${letter(x.i)} · ${CONFIDENCE[x.c].label}`).join('  +  ');
 function voteBarHTML() {
   const cq = game.s?.q;
   const ps = connectedPlayers();
   if (!cq || !ps.length || cq.answered !== null) return '<div id="votebar"></div>';
   const n = ps.filter((p) => ui.votes.has(p.id)).length;
-  return `<div id="votebar" class="votebar">
+  const waiting = ps.filter((p) => !ui.votes.has(p.id)).map((p) => p.name);
+  return `<div id="votebar" class="votebar ${ready() ? 'ready' : ''}">
     <span>📱 ${ps.map((p) => `<span class="pname ${ui.votes.has(p.id) ? 'done' : ''}"><span class="pdot" style="background:${p.color}"></span>${esc(p.name)}${ui.votes.has(p.id) ? ' ✓' : ''}</span>`).join('')}</span>
-    ${ui.revealed ? '<span class="small muted">Picks revealed — talk it over, then lock in.</span>' : `<button class="btn small" data-act="reveal" ${n ? '' : 'disabled'}>Reveal picks (${n}/${ps.length})</button>`}
+    ${ready() ? '<span class="ready-tag">✓ Ready. Talk it over, then anyone can lock in.</span>'
+      : `<span class="small muted">Waiting for ${esc(waiting.join(', '))} (${n}/${ps.length})</span>${n ? '<button class="btn small no-remote" data-act="skipwait" data-rlabel="Go without them">Go without them</button>' : ''}`}
   </div>`;
 }
-function reveal() {
+// Everyone is in (or the screen said go). If one answer clearly leads, it becomes the team answer
+// to start with; if the picks are tied there's no starting answer, so somebody has to choose.
+function readyUp() {
   ui.revealed = true;
-  if (!ui.sel && ui.votes.size) {   // start the team answer at the most popular pick
+  if (!ui.sels.length && ui.votes.size) {
+    const need = maxPicks();
     const tally = {};
     for (const v of ui.votes.values()) (tally[v.i] ||= []).push(v.c);
-    const [i, cs] = Object.entries(tally).sort((a, b) => b[1].length - a[1].length)[0];
-    ui.sel = { i: +i, c: Math.round(cs.reduce((a, b) => a + b, 0) / cs.length) };
+    const groups = Object.entries(tally).sort((a, b) => b[1].length - a[1].length);
+    const cut = groups[need]?.[1].length ?? 0;      // anything level with the first answer left out is a tie
+    ui.sels = groups.filter(([, cs]) => cs.length > cut).slice(0, need)
+      .map(([i, cs]) => ({ i: +i, c: Math.round(cs.reduce((a, b) => a + b, 0) / cs.length) }));
   }
+}
+// Re-draw the question if it's what's on screen (a phone may act while Help or Settings is open)
+function rerenderQuestion() {
+  const ov = $('#overlay');
+  if (ov && game.s?.q && (game.s.phase === 'question' || game.s.phase === 'boss')) renderQuestion(ov);
+}
+function maybeReady() {   // a phone dropped out: the rest may now be everyone
+  const cq = game.s?.q;
+  if (!cq || cq.answered !== null || !$('#overlay .q-panel') || !everyoneIn() || ui.sels.length) return;
+  readyUp();
+  rerenderQuestion();
 }
 function onVote(p, m) {
   const cq = game.s?.q;
-  if (!cq || m.key !== cq.key || cq.answered !== null || cq.removed.includes(m.i)) return;
+  if (!cq || m.key !== cq.key || cq.answered !== null || !Number.isInteger(m.i) || m.i < 0 || m.i >= cq.q.answers.length || ![0, 1, 2].includes(m.c) || cq.removed.includes(m.i)) return;
+  syncVoteKey();
   ui.votes.set(p.id, { i: m.i, c: m.c });
-  const ps = connectedPlayers();
-  if (!ui.revealed && ps.length && ps.every((x) => ui.votes.has(x.id))) reveal();
-  if (game.s.phase === 'question' || game.s.phase === 'boss') renderQuestion($('#overlay'));
+  if (everyoneIn()) readyUp();
+  rerenderQuestion();
   syncRemote();
 }
-function onUseMine(p) {
-  const cq = game.s?.q, v = ui.votes.get(p.id);
-  if (!cq || !v || cq.answered !== null) return;
-  ui.sel = { ...v };
-  renderQuestion($('#overlay'));
-  toast(`${p.name}'s pick is now the team answer.`);
+// A phone chose an answer for the team (only once everyone's ready). Its
+// confidence is the average of the picks already on that answer.
+function onTeam(p, m) {
+  const cq = game.s?.q;
+  if (!cq || m.key !== cq.key || cq.answered !== null || !Number.isInteger(m.i) || m.i < 0 || m.i >= cq.q.answers.length || cq.removed.includes(m.i)) return;
+  syncVoteKey();
+  if (!ready()) return;
+  const vs = [...ui.votes.values()].filter((v) => v.i === m.i);
+  chooseTeam(m.i, vs.length ? Math.round(vs.reduce((a, v) => a + v.c, 0) / vs.length) : 1);
+  rerenderQuestion();
+  syncRemote();
 }
 
 function renderQuestion(ov) {
@@ -643,6 +735,8 @@ function renderQuestion(ov) {
   const boss = s.boss;
   const res = ui.result;
   const answered = cq.answered !== null;
+  const picked = cq.picked || [cq.answered];
+  const need = game.picksNeeded();
   const stars = '★'.repeat(cq.tier) + '☆'.repeat(4 - cq.tier);
   const tools = [];
   for (const k of Object.keys(SKILLS)) if (s.skills[k]) {
@@ -651,7 +745,7 @@ function renderQuestion(ov) {
     tools.push(`<button class="tool ${armed ? 'armed' : ''}" data-skill="${k}" ${game.canCast(k) && !answered ? '' : 'disabled'} title="${esc(t.desc)}" data-rlabel="Use ${t.name} (${game.skillCost(k)} MP)">${t.name} <span class="mp">${game.skillCost(k)} MP</span>${armed ? ' ✓' : ''}</button>`);
   }
   const canEasier = statFx.tierDrop(s.stats.C) > cq.dropped && cq.tier > 1;
-  tools.push(`<button class="tool" data-act="reroll" ${s.rerolls > 0 && !answered ? '' : 'disabled'} title="Swap for a question on a different topic" data-rlabel="Reroll: different topic (${s.rerolls} left)">↻ Reroll <span class="muted">(${s.rerolls})</span></button>`);
+  tools.push(`<button class="tool" data-act="reroll" ${s.rerolls > 0 && !answered ? '' : 'disabled'} title="A fresh question on the same topic" data-rlabel="Reroll: same topic (${s.rerolls} left)">↻ Reroll <span class="muted">(${s.rerolls})</span></button>`);
   if (statFx.tierDrop(s.stats.C) > 0) tools.push(`<button class="tool" data-act="easier" ${s.rerolls > 0 && canEasier && !answered ? '' : 'disabled'} title="Charisma: reroll into an easier question" data-rlabel="Reroll into an easier question">"Come on, this is too hard!" ↓★</button>`);
 
   const bossStage = boss ? `
@@ -673,8 +767,9 @@ function renderQuestion(ov) {
         <div class="q-topic">${esc(q.topicName || TOPICS[cq.topic]?.name || q.topic)}${q.subtopic && q.subtopic !== q.topicName ? ' › ' + esc(q.subtopic) : ''} · <span class="stars" title="${TIERS[cq.tier].name}">${stars}</span>
           ${q.returning ? '<div class="returning">↺ One you missed before</div>' : ''}
           ${cq.safe ? '<div class="returning" style="color:var(--green)">No harm if wrong</div>' : ''}
-          ${cq.bonus === 'double' ? '<div class="returning" style="color:var(--gold)">Double EXP</div>' : ''}</div>
-        ${!answered && !q.test && !ui.flagging ? '<button class="flag" data-act="flag" title="Too niche or broken? Flag it: it\'s removed and you get a free reroll" data-rlabel="⚑ Flag this question">⚑ Flag question</button>' : ''}
+          ${cq.bonus === 'double' ? '<div class="returning" style="color:var(--gold)">Double EXP</div>' : ''}
+          ${!answered && need === 2 ? '<div class="returning" style="color:var(--gold)">Second Guess: choose TWO answers, then lock in both</div>' : ''}</div>
+        ${!answered && !q.test && !ui.flagging ? '<button class="flag" data-act="flag" title="Too niche or broken? Flag it: it\'s removed and you get a free replacement on the same topic" data-rlabel="⚑ Flag this question">⚑ Flag question</button>' : ''}
       </div>
       <div class="q-prompt">${esc(q.prompt)}</div>
       ${drawVisual(q.visual)}
@@ -682,11 +777,12 @@ function renderQuestion(ov) {
         ${q.answers.map((a, i) => {
           const removed = cq.removed.includes(i);
           let cls = removed ? 'removed' : '';
-          if (answered) cls += i === q.correct ? ' right' : i === cq.answered ? ' wrong' : '';
-          else if (ui.sel && ui.sel.i === i) cls += ` sel conf${ui.sel.c}`;
+          const mine = ui.sels.find((x) => x.i === i);
+          if (answered) cls += i === q.correct ? ' right' : picked.includes(i) ? ' wrong' : '';
+          else if (mine) cls += ` sel conf${mine.c}`;
           return `<div class="answer ${cls}">
             <div class="a-body"><span class="key">${letter(i)}</span><span class="a-text">${answerHTML(a)}</span></div>
-            ${answered || removed ? (answered && i === cq.answered ? `<div class="your-conf">${CONFIDENCE[cq.conf].label}</div>` : '') : `<div class="zones">${CONFIDENCE.map((c, k) => `<button class="zone z${k} ${ui.sel && ui.sel.i === i && ui.sel.c === k ? 'on' : ''}" data-ans="${i}" data-conf="${k}" aria-label="${esc(answerLabel(a, i))} — ${c.label}"><span class="zl">${c.label}</span><span class="zchips">${chipsHTML(i, k)}</span></button>`).join('')}</div>`}
+            ${answered || removed ? (answered && i === cq.answered ? `<div class="your-conf">${CONFIDENCE[cq.conf].label}</div>` : '') : `<div class="zones">${CONFIDENCE.map((c, k) => `<button class="zone z${k} ${mine && mine.c === k ? 'on' : ''}" data-ans="${i}" data-conf="${k}" aria-label="${esc(answerLabel(a, i))} — ${c.label}"><span class="zl">${c.label}</span><span class="zchips">${chipsHTML(i, k)}</span></button>`).join('')}</div>`}
           </div>`;
         }).join('')}
       </div>
@@ -695,15 +791,15 @@ function renderQuestion(ov) {
       ${!answered && ui.flagging ? `
       <div class="flag-box sk" data-rsection="Flag this question">
         <h3>Flag this question?</h3>
-        <p class="small muted">It's taken out of the game and saved to your feedback for review. You get a free reroll.</p>
+        <p class="small muted">It's taken out of the game and saved to your feedback for review. You get a fresh question on the same topic, free.</p>
         <div class="row flag-reasons">${FLAG_REASONS.map((r) => `<button class="btn ${r.id === 'other' ? '' : 'red'}" data-flag="${r.id}" data-rlabel="Flag: ${r.label}">${r.label}</button>`).join('')}</div>
         <input type="text" id="flag-note" maxlength="300" placeholder="Optional note (what's wrong with it?)" value="${esc(ui.flagNote || '')}">
         <div class="row" style="margin-top:8px"><button class="btn small ghost link" data-act="flag-cancel" data-rlabel="Cancel flag">Cancel</button></div>
       </div>` : !answered ? `
       <div class="tools">${tools.join('')}</div>
       ${voteBarHTML()}
-      <div class="lockrow"><span class="kbd">Tap the left, middle or right of an answer · 1–4 on a keyboard</span>
-        <button class="btn primary lock" data-act="lock" ${ui.sel === null ? 'disabled' : ''}>Lock in${ui.sel ? `: ${letter(ui.sel.i)} · ${CONFIDENCE[ui.sel.c].label}` : ''}</button></div>`
+      <div class="lockrow"><span class="kbd">${need === 2 ? 'Second Guess: tap two answers · tap a chosen one again to drop it' : 'Tap the left, middle or right of an answer · 1–4 on a keyboard'}</span>
+        <button class="btn primary lock ${connectedPlayers().length && !ready() ? 'no-remote' : ''}" data-act="lock" ${ui.sels.length === need ? '' : 'disabled'}>${ui.sels.length === need ? `Lock in${need === 2 ? ' both' : ''}: ${teamLabel()}` : need === 2 ? `Lock in both (${ui.sels.length}/2 chosen)` : 'Lock in'}</button></div>`
       : resultHTML()}
     </div>
   </div>`;
@@ -730,24 +826,21 @@ function resultHTML() {
   const title = r.right ? (r.conf === 2 ? 'Definitely right!' : pick(['Yes!', 'Right!', 'Got it!', 'Nicely done.'])) : pick(['Not quite.', 'Oh no…', 'Missed it.', 'The fog thickens.']);
   const last = r.defeat ? 'See what happened' : s.boss && s.boss.asked >= 5 ? 'Finish the boss' : 'Continue';
   return `<div class="result ${r.right ? 'good' : 'bad'}"><h3>${title}</h3>
-    ${!r.right ? `<div>The answer was <b>${esc(answerText(s.q.q.answers[r.correctIndex]) || 'option ' + letter(r.correctIndex))}</b>.</div>` : ''}
+    ${r.two ? `<div class="small muted">Second Guess: ${r.picked.map(letter).join(' and ')} locked in together.</div>` : ''}
+    <div class="reveal-ans">${r.right ? 'Answer' : 'The answer was'}: <b>${esc(answerText(s.q.q.answers[r.correctIndex]) || 'option ' + letter(r.correctIndex))}</b></div>
+    ${s.q.q.explain ? `<p class="explain">${esc(s.q.q.explain)}</p>` : ''}
+    ${learnUrl(s.q.q) ? `<a class="learn" href="${learnUrl(s.q.q)}" target="_blank" rel="noopener" data-rlabel="Learn more on Google">🔎 Learn more on Google</a>` : ''}
     <div class="fx">${fx.join('')}</div></div>
     <div class="lockrow"><button class="btn primary" data-act="next">${last} ➜</button></div>`;
 }
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 function lockIn() {
-  if (!ui.sel) return;
-  const r = game.answer(ui.sel.i, ui.sel.c);
+  const picks = ui.sels.map((x) => ({ ...x }));
+  if (picks.length !== game.picksNeeded()) return;
+  const r = game.answer(picks);
   if (!r) return;
-  if (r.retry) {
-    Sound.bad();
-    toast('Not that one — Second Guess crossed it out. Try again!');
-    ui.sel = null;
-    refreshHud();
-    return renderQuestion($('#overlay'));
-  }
-  ui.result = r; ui.sel = null;
+  ui.result = r; ui.sels = [];
   if (r.right) { Sound.good(); if (r.levelUps) setTimeout(() => Sound.levelUp(), 450); } else Sound.bad();
   refreshHud();
   renderQuestion($('#overlay'));
@@ -757,20 +850,20 @@ function onQuestionClick(e) {
   const t = e.target.closest('button'); if (!t) return;
   const cq = game.s.q;
   if (t.dataset.ans !== undefined && cq.answered === null) {
-    ui.sel = { i: +t.dataset.ans, c: +t.dataset.conf };
+    chooseTeam(+t.dataset.ans, +t.dataset.conf);
     ui.focusWant = `[data-ans="${t.dataset.ans}"][data-conf="${t.dataset.conf}"]`;
     return renderQuestion($('#overlay'));
   }
   if (t.dataset.skill) {
     const msg = game.cast(t.dataset.skill);
     if (msg) toast(msg);
-    if (ui.sel && cq.removed.includes(ui.sel.i)) ui.sel = null;
+    ui.sels = ui.sels.filter((x) => !cq.removed.includes(x.i)).slice(-game.picksNeeded());
     refreshHud();
     return renderQuestion($('#overlay'));
   }
   const a = t.dataset.act;
   if (a === 'reroll' || a === 'easier') {
-    if (game.reroll(a === 'easier')) { ui.sel = null; toast(a === 'easier' ? 'Fine — an easier one.' : 'A new question drifts in.'); }
+    if (game.reroll(a === 'easier')) { ui.sels = []; toast(a === 'easier' ? 'Fine — an easier one, same topic.' : 'A fresh question, same topic.'); }
     refreshHud();
     return renderQuestion($('#overlay'));
   }
@@ -779,15 +872,15 @@ function onQuestionClick(e) {
   if (t.dataset.flag) {
     const note = (ui.flagNote || '').trim();
     ui.flagging = false;
-    if (game.flag(t.dataset.flag, note)) { ui.sel = null; toast(`Flagged (${reasonLabel(t.dataset.flag).toLowerCase()}) — saved for review. Free reroll!`); }
+    if (game.flag(t.dataset.flag, note)) { ui.sels = []; toast(`Flagged (${reasonLabel(t.dataset.flag).toLowerCase()}) — saved for review. Here's a fresh one on the same topic.`); }
     refreshHud();
     return renderQuestion($('#overlay'));
   }
-  if (a === 'reveal') { reveal(); return renderQuestion($('#overlay')); }
+  if (a === 'skipwait') { ui.forced = true; readyUp(); return renderQuestion($('#overlay')); }
   if (a === 'lock') return lockIn();
   if (a === 'next') {
     const wasDefeat = ui.result?.defeat;
-    ui.result = null; ui.sel = null;
+    ui.result = null; ui.sels = [];
     if (wasDefeat) return showEnd();
     game.continueAfterAnswer();
     return renderGame();
@@ -824,7 +917,7 @@ function renderTutorial(ov) {
     <h2>Before you set off</h2>
     <ul class="tut-list">
       <li><b>Tap an answer where you feel it:</b> left = not sure, middle = sure, right = definitely. More sure = more EXP if right, more damage if wrong. Then <b>Lock in</b>.</li>
-      <li><b>↻ Reroll</b> swaps a question for one on a different topic (Charisma gives more).</li>
+      <li><b>↻ Reroll</b> swaps a question for a fresh one on the same topic (Charisma gives more).</li>
       <li><b>⚑ Flag question</b> if it’s too niche or broken: it’s removed, and the swap is free.</li>
       <li><b>Pick paths together.</b> A boss waits at the top of every map.</li>
     </ul>`;
@@ -950,8 +1043,11 @@ function showEnd() {
   const s = game.s, win = s.phase === 'victory';
   const entry = game.lastEntry;
   const score = game.score();
+  const board = Game.leaderboard();
+  const rank = entry ? board.findIndex((r) => r.id === entry.id) + 1 : 0;
   game.clearSave();
   app.dataset.from = '';
+  setBossTheme(false);
   app.innerHTML = `
   ${win ? '<div class="home-light"></div>' : ''}
   <div class="screen center end ${win ? 'victory' : 'defeat'}">
@@ -960,17 +1056,22 @@ function showEnd() {
     <p class="tagline">${win ? 'The beacon on the summit lights a door he remembers. Thank you for walking with him.' : `He made it to ${esc(MAPS[s.mapIndex].name)}. Next time, the way may be clearer.`}</p>
     <div class="scorebig">${score.toLocaleString()}</div>
     <p class="muted">${s.tally.maps} map${s.tally.maps === 1 ? '' : 's'} cleared · ${s.tally.nodes} nodes · ${s.tally.correct} right answers · level ${s.level}</p>
+    ${entry ? `<div class="squad-edit sk">
+      <label class="stack"><span>Squad name</span><input type="text" id="squad-end" data-squad maxlength="28" value="${esc(entry.party)}"></label>
+      <p class="small muted">${rank ? `<b>#${rank}</b> of ${board.length} on the leaderboard · ` : ''}${esc(entry.mode)} · ${esc(entry.sizeName)}${entry.players.filter(Boolean).length ? ' · ' + esc(entry.players.filter(Boolean).join(', ')) : ''}. Saved. Change the name any time here.</p>
+    </div>` : '<p class="muted small">Test runs aren\'t saved to the leaderboard.</p>'}
     <div class="row" style="margin-top:20px">
       <button class="btn primary" data-act="again">Walk again</button>
       <button class="btn" data-act="board">Leaderboard</button>
       <button class="btn ghost link" data-act="title">Title</button>
     </div>
   </div>`;
+  app.oninput = (e) => { if (entry && e.target.id === 'squad-end') Game.renameEntry(entry.id, e.target.value); };
   app.onclick = (e) => {
     const a = e.target.closest('[data-act]')?.dataset.act;
-    if (a === 'again') showSetup();
-    if (a === 'board') showBoard(entry);
-    if (a === 'title') showTitle();
+    if (a === 'again') { app.oninput = null; showSetup(); }
+    if (a === 'board') { app.oninput = null; showBoard(entry); }
+    if (a === 'title') { app.oninput = null; showTitle(); }
   };
   focusFirst('[data-act=again]');
 }
@@ -1029,7 +1130,8 @@ document.addEventListener('keydown', (e) => {
   if ((ph === 'question' || ph === 'boss') && game.s.q && game.s.q.answered === null && !$('.join-modal')) {
     const i = '1234'.indexOf(e.key);
     if (i >= 0 && i < game.s.q.q.answers.length && !game.s.q.removed.includes(i)) {
-      ui.sel = ui.sel && ui.sel.i === i ? { i, c: (ui.sel.c + 1) % 3 } : { i, c: 1 };
+      const cur = ui.sels.find((x) => x.i === i);
+      chooseTeam(i, cur ? (cur.c + 1) % 3 : 1);
       renderQuestion($('#overlay'));
     }
   }
@@ -1056,17 +1158,18 @@ function remoteState() {
   const inGame = !!(s && app.dataset.from === 'game' && $('.game'));
   const title = $('.panel h2', root)?.innerText || $('.board-head h2', root)?.innerText || $('h2, h1', root)?.innerText || TITLE;
   const text = $('.panel > p', root)?.innerText || (inGame && s.phase === 'map' ? 'Choose a path together.' : $('.tagline, .note', root)?.innerText || '');
-  const base = { t: 'state', title, text, actions: harvestActions(), rv: ui.rv, players: (ui.room?.players || []).map((p) => ({ id: p.id, name: p.name, color: p.color, connected: p.connected })) };
-  if (inGame) base.hud = { hp: s.hp, maxHp: game.maxHp, mp: s.mp, maxMp: game.maxMp, level: s.level, map: MAPS[s.mapIndex].name, party: s.partyName };
+  const squadEl = $('[data-squad]', root);
+  const base = { t: 'state', title, text, squad: squadEl ? { value: squadEl.value } : null, actions: harvestActions(), rv: ui.rv, players: (ui.room?.players || []).map((p) => ({ id: p.id, name: p.name, color: p.color, connected: p.connected })) };
+  if (inGame) base.hud = { hp: s.hp, maxHp: game.maxHp, mp: s.mp, maxMp: game.maxMp, level: s.level, map: MAPS[s.mapIndex].name, party: s.partyName, boss: !!s.boss };
   if (inGame && s.q && (s.phase === 'question' || s.phase === 'boss')) {
     syncVoteKey();
     const cq = s.q, q = cq.q, answered = cq.answered !== null;
     base.q = {
       key: cq.key, prompt: q.prompt, topic: q.topicName || TOPICS[cq.topic]?.name, subtopic: q.subtopic, tier: cq.tier, visual: q.visual || null,
       answers: q.answers, removed: cq.removed, hints: game.hints(), boss: s.boss ? { name: s.boss.name, asked: s.boss.asked, mistakes: s.boss.mistakes } : null,
-      answered, chosen: cq.answered, conf: cq.conf, correct: answered ? q.correct : null, result: answered && ui.result ? { right: ui.result.right, exp: ui.result.exp, dmg: ui.result.dmg } : null,
-      team: ui.sel, revealed: ui.revealed, votes: ui.revealed ? [...ui.votes.entries()].map(([id, v]) => ({ id, ...v })) : null,
-      voted: [...ui.votes.keys()],
+      answered, chosen: cq.answered, conf: cq.conf, correct: answered ? q.correct : null, result: answered && ui.result ? { right: ui.result.right, exp: ui.result.exp, dmg: ui.result.dmg, answer: answerText(q.answers[q.correct]), explain: q.explain || '', learn: learnUrl(q) } : null,
+      team: ui.sels, need: game.picksNeeded(), ready: ready(), revealed: ui.revealed, votes: ui.revealed ? [...ui.votes.entries()].map(([id, v]) => ({ id, ...v })) : null,
+      voted: [...ui.votes.keys()], picked: cq.picked || null,
     };
   }
   return base;
@@ -1081,6 +1184,13 @@ function syncRemote() {
   }, 60);
 }
 new MutationObserver(() => syncRemote()).observe(document.body, { childList: true, subtree: true });
+// A phone typed the squad name: put it in the squad box on the big screen
+function onSquad(m) {
+  const el = document.querySelector('[data-squad]');
+  if (!el) return;
+  el.value = String(m.name ?? '').slice(0, 28);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
 function onRemoteAction(p, m) {
   if (m.rv !== ui.rv) return syncRemote();          // stale button list: resend
   const el = document.querySelector(`[data-rid="${m.rid}"]`);

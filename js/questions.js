@@ -6,7 +6,7 @@
 //     marked Fix / Cut / unreviewed.
 //   • generated brain teasers (puzzles.js)
 import { REMOVED } from './removed.js';
-import { TOPICS, ALL_TOPIC_IDS } from './config.js';
+import { TOPICS, ALL_TOPIC_IDS, topicMaxTier } from './config.js';
 import { generate } from './puzzles.js';
 
 const API = 'https://opentdb.com/api.php';
@@ -36,6 +36,15 @@ export function tooSpecific(prompt, correct, wrongs = []) {
 // ── Auto hints for questions without their own ──────────────────
 function mask(word, reveal) {
   return [...word].map((ch, i) => (/[\p{L}\p{N}]/u.test(ch) ? (reveal(i, word.length) ? ch : '_') : ch)).join(' ');
+}
+// "Learn more": a Google search of the question + right answer. Opened on a
+// phone it shows Google's own AI overview. (A static page can't call Google
+// itself, so the player opens it.) Skipped for picture/puzzle questions.
+export function learnUrl(q) {
+  if (!q || q.kind !== 'trivia' || q.test) return '';
+  const right = answerText(q.answers?.[q.correct]);
+  if (!right) return '';
+  return 'https://www.google.com/search?q=' + encodeURIComponent(`${q.prompt} ${right}`);
 }
 export const answerText = (a) => (typeof a === 'string' ? a : a.text || '');
 export function hintsFor(q) {
@@ -97,7 +106,7 @@ export class QuestionSource {
         ids.add(id);
         this.bankKeys.add(k);
         const t = Math.max(1, Math.min(4, tier | 0));
-        ((this.bank[topic] ||= { 1: [], 2: [], 3: [], 4: [] })[t]).push({ id, topic, tier: t, prompt, correct, wrongs: rest, hint: extra?.h || '' });
+        ((this.bank[topic] ||= { 1: [], 2: [], 3: [], 4: [] })[t]).push({ id, topic, tier: t, prompt, correct, wrongs: rest, hint: extra?.h || '', explain: extra?.e || '' });
         this.bankCount++;
       }
       this.excl = new Set(data.excl || []);
@@ -112,7 +121,7 @@ export class QuestionSource {
   fromBank(b) {
     const answers = shuffle([b.correct, ...b.wrongs]);
     const def = TOPICS[b.topic];
-    return { id: b.id, kind: 'trivia', source: 'bank', topic: b.topic, topicName: def?.name, subtopic: def?.name, tier: b.tier, prompt: b.prompt, answers, correct: answers.indexOf(b.correct), hint: b.hint || undefined };
+    return { id: b.id, kind: 'trivia', source: 'bank', topic: b.topic, topicName: def?.name, subtopic: def?.name, tier: b.tier, prompt: b.prompt, answers, correct: answers.indexOf(b.correct), hint: b.hint || undefined, explain: b.explain || undefined };
   }
   // A bank question near this tier. fresh = never seen on this device.
   pickBank(topic, tier, { fresh = true } = {}) {
@@ -234,6 +243,7 @@ export class QuestionSource {
   get(tier, topic, opts = {}) {
     tier = Math.max(1, Math.min(4, Math.round(tier)));
     if (!TOPICS[topic]) topic = pick(this.topics);
+    tier = Math.min(tier, topicMaxTier(topic));       // Math / Spelling / Emoji top out at level 2
     if (this.testMode) return this.testQuestion(tier, topic);
     const def = TOPICS[topic];
     // Brain teasers: generated fresh, mixed with any bank questions for that topic

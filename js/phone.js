@@ -5,7 +5,7 @@
 import { CONFIDENCE, TIERS } from './config.js';
 import { drawNoah, drawShape, drawVisual, drawSwatch } from './art.js';
 import { ID_PREFIX, loadPeer, peerOptions } from './remote.js';
-import { Sound } from './audio.js';
+import { Sound, setBossTheme } from './audio.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -42,7 +42,7 @@ export function startPhone(code) {
   // Each step has a timeout, so a phone never sits on "Connecting…" forever;
   // it tears everything down and tries again, and after a couple of misses
   // shows tips plus a Try again button.
-  let attempt = 0, fails = 0, openTimer = null;
+  let attempt = 0, fails = 0, openTimer = null, lastErr = '';
   function cleanup() {
     clearTimeout(openTimer);
     try { conn?.close(); } catch {}
@@ -61,17 +61,24 @@ export function startPhone(code) {
       peer = new Peer(undefined, peerOptions());
       peer.on('error', (e) => {
         if (mine !== attempt) return;
+        lastErr = e.type || 'error';
         if (e.type === 'peer-unavailable') { cleanup(); status = 'idle'; showJoin(`Couldn't find room ${code}. Check the code on the big screen, and that it's still open.`); }
         else if (status !== 'connected') retrySoon(e.type);
       });
       peer.on('disconnected', () => { if (peer && !peer.destroyed && status === 'connected') setTimeout(() => peer && !peer.destroyed && peer.reconnect(), 1500); });
-      await new Promise((res, rej) => { peer.once('open', res); setTimeout(() => rej(new Error('server timeout')), 12000); });
+      await new Promise((res, rej) => { peer.once('open', res); setTimeout(() => rej(new Error('server timeout')), 15000); });
       if (mine !== attempt) return;
       renderStatus('Found the room — connecting to the big screen…');
       // JSON is the most compatible way to send data (some Android browsers
       // stall with PeerJS's default binary packing).
       conn = peer.connect(ID_PREFIX + code, { reliable: true, serialization: 'json' });
-      openTimer = setTimeout(() => { if (mine === attempt && status !== 'connected') retrySoon('timeout'); }, 12000);
+      // Give slow networks (typical on Android) real time to finish ICE before
+      // giving up; the first miss re-dials on the same broker session.
+      openTimer = setTimeout(() => {
+        if (mine !== attempt || status === 'connected') return;
+        lastErr = 'timed out reaching the big screen' + (conn?.peerConnection ? ' (ice: ' + conn.peerConnection.iceConnectionState + ')' : '');
+        retrySoon('timeout');
+      }, 22000);
       conn.on('open', () => {
         if (mine !== attempt) return;
         clearTimeout(openTimer);
@@ -95,9 +102,10 @@ export function startPhone(code) {
   }
   function renderStatus(text, help = false) {
     if (state && status === 'connected') return;
+    setBossTheme(false);
     app.innerHTML = `<div class="screen center"><div class="title-noah">${drawNoah(1, { size: 100 })}</div><p class="tagline">${esc(text)}</p>
       ${help ? `<div class="note" style="max-width:340px;margin-top:14px;text-align:left">
-        <b>Having trouble?</b><br>• Put this phone on the <b>same Wi-Fi</b> as the big screen (not mobile data).<br>• Open the link in <b>Chrome</b> (or Safari), not inside the camera or Lens app — tap ⋮ → “Open in Chrome”.<br>• Check the code: <b>${esc(code)}</b>.</div>
+        <b>Having trouble?</b><br>• Put this phone on the <b>same Wi-Fi</b> as the big screen (not mobile data).<br>• Open the link in <b>Chrome</b> (or Safari), not inside the camera or Lens app — tap ⋮ → “Open in Chrome”.<br>• Check the code: <b>${esc(code)}</b>.${lastErr ? `<br><span class="muted">Last error: ${esc(lastErr)}</span>` : ''}</div>
         <div class="row" style="margin-top:14px"><button class="btn primary" id="tryagain">Try again now</button><button class="btn small ghost link" id="changename">Change name</button></div>` : ''}</div>`;
     const ta = $('#tryagain'); if (ta) ta.onclick = () => connect();
     const cn = $('#changename'); if (cn) cn.onclick = () => { clearTimeout(retryTimer); cleanup(); attempt++; fails = 0; status = 'idle'; showJoin(); };
@@ -113,8 +121,10 @@ export function startPhone(code) {
   function playerName(id) { return state.players.find((p) => p.id === id); }
 
   function render() {
+    if (document.activeElement && document.activeElement.id === 'squadin') return;   // don't yank the keyboard away while typing
     const s = state;
     const q = s.q;
+    setBossTheme(!!s.hud?.boss);
     if (q && q.key !== lastKey) { lastKey = q.key; myVote = null; }
     if (s.you?.vote) myVote = s.you.vote;
     if (q && q.answered && q.result && soundedKey !== q.key) { soundedKey = q.key; q.result.right ? Sound.good() : Sound.bad(); }
@@ -126,38 +136,50 @@ export function startPhone(code) {
       </div><div class="p-me">${esc(name)}</div></div>` : `<div class="p-hud simple"><span>📱 ${esc(name)} · room ${esc(code)}</span></div>`;
 
     let body = '';
+    const lockAct = q && !q.answered && q.ready ? (s.actions || []).find((a) => a.lock) : null;
     if (q) {
       const done = q.answered;
       const votes = q.votes || [];
+      const team = q.team || [];
+      const nHere = s.players.filter((p) => p.connected).length;
       body += `<div class="p-q">
         <div class="q-topic">${q.boss ? `<b>${esc(q.boss.name)}</b> · ` : ''}${esc(q.topic)} · <span class="stars">${'★'.repeat(q.tier)}${'☆'.repeat(4 - q.tier)}</span></div>
         <div class="q-prompt">${esc(q.prompt)}</div>
         ${drawVisual(q.visual)}
+        ${done ? '' : `<div class="p-status ${q.ready ? 'ready' : ''}">${q.ready
+              ? (q.need === 2 ? '✓ Everyone\'s ready. Second Guess: choose two answers, then lock in both.' : '✓ Everyone\'s ready. Talk it over, choose an answer for the team, then anyone can lock it in.')
+              : `${myVote ? `Your pick: <b>${letter(myVote.i)} · ${CONFIDENCE[myVote.c].label}</b>. ` : 'Tap the left, middle or right of an answer. '}${q.voted.length}/${nHere} have picked${q.revealed ? ': everyone\'s picks show on the answers' : ''}.`}</div>`}
         <div class="answers ${done ? 'done' : ''}">
         ${q.answers.map((a, i) => {
           const removed = q.removed.includes(i);
+          const inTeam = team.find((x) => x.i === i);
           let cls = removed ? 'removed' : '';
-          if (done) cls += i === q.correct ? ' right' : i === q.chosen ? ' wrong' : '';
+          if (done) cls += i === q.correct ? ' right' : (q.picked || [q.chosen]).includes(i) ? ' wrong' : '';
           else if (myVote && myVote.i === i) cls += ` sel conf${myVote.c}`;
-          if (q.team && q.team.i === i && !done) cls += ' team';
+          if (inTeam && !done) cls += ' team';
           const zones = done || removed ? '' : `<div class="zones">${CONFIDENCE.map((c, k) => {
             const here = q.revealed ? votes.filter((v) => v.i === i && v.c === k).map((v) => playerName(v.id)).filter(Boolean) : [];
             return `<button class="zone z${k} ${myVote && myVote.i === i && myVote.c === k ? 'on' : ''}" data-i="${i}" data-c="${k}"><span class="zl">${c.label}</span><span class="zchips">${here.map((p) => `<span class="vchip" style="background:${p.color}">${esc(p.name[0].toUpperCase())}</span>`).join('')}</span></button>`;
           }).join('')}</div>`;
-          const badge = q.team && q.team.i === i && !done ? `<span class="team-badge">Team · ${CONFIDENCE[q.team.c].label}</span>` : '';
-          return `<div class="answer ${cls}"><div class="a-body"><span class="key">${letter(i)}</span><span class="a-text">${answerHTML(a)}</span>${badge}</div>${zones}</div>`;
+          const badge = inTeam && !done ? `<span class="team-badge">Team · ${CONFIDENCE[inTeam.c].label}</span>` : '';
+          // Once everyone has picked, anyone can choose any answer for the team, agreed or not
+          const choose = !done && !removed && q.ready ? `<button class="pickteam ${inTeam ? 'on' : ''}" data-i="${i}">${inTeam ? (q.need === 2 ? '✓ One of your two (tap to drop)' : '✓ The team answer') : q.need === 2 ? 'Add to your two' : 'Choose this for the team'}</button>` : '';
+          return `<div class="ans-wrap"><div class="answer ${cls}"><div class="a-body"><span class="key">${letter(i)}</span><span class="a-text">${answerHTML(a)}</span>${badge}</div>${zones}</div>${choose}</div>`;
         }).join('')}
         </div>
         ${q.hints?.length ? `<div class="hints">${q.hints.map((h) => `<p>${esc(h)}</p>`).join('')}</div>` : ''}
-        ${done ? `<div class="result ${q.result?.right ? 'good' : 'bad'}"><h3>${q.result?.right ? 'Right!' : 'Not quite.'}</h3>${q.result?.exp ? `<span class="chip">+${q.result.exp} EXP</span>` : ''}${q.result?.dmg ? `<span class="chip red">−${q.result.dmg} HP</span>` : ''}</div>`
-          : `<div class="p-status">${myVote ? `Your pick: <b>${letter(myVote.i)} · ${CONFIDENCE[myVote.c].label}</b>. ` : 'Tap the left, middle or right of an answer. '}${q.revealed ? 'Everyone\'s picks are shown — talk it over!' : `${q.voted.length}/${s.players.filter((p) => p.connected).length} have picked.`}</div>
-          ${q.revealed && myVote ? '<button class="btn" id="usemine">Use my pick as the team answer</button>' : ''}`}
+        ${done ? `<div class="result ${q.result?.right ? 'good' : 'bad'}"><h3>${q.result?.right ? 'Right!' : 'Not quite.'}</h3>${q.result?.exp ? `<span class="chip">+${q.result.exp} EXP</span>` : ''}${q.result?.dmg ? `<span class="chip red">−${q.result.dmg} HP</span>` : ''}
+          ${q.result?.answer ? `<div class="reveal-ans">${q.result.right ? 'Answer' : 'The answer was'}: <b>${esc(q.result.answer)}</b></div>` : ''}
+          ${q.result?.explain ? `<p class="explain">${esc(q.result.explain)}</p>` : ''}
+          ${q.result?.learn ? `<a class="learn" href="${esc(q.result.learn)}" target="_blank" rel="noopener">🔎 Learn more on Google</a>` : ''}</div>`
+          : ''}        ${!done && lockAct ? `<div class="lockbar-wrap"><button class="pbtn primary lock lockbar" data-rid="${lockAct.rid}">${esc(lockAct.label)}</button></div>` : ''}
       </div>`;
     } else {
-      body += `<div class="p-panel"><h2>${esc(s.title)}</h2>${s.text ? `<p>${esc(s.text)}</p>` : ''}</div>`;
+      body += `<div class="p-panel"><h2>${esc(s.title)}</h2>${s.text ? `<p>${esc(s.text)}</p>` : ''}
+        ${s.squad ? `<label class="stack squad-in"><span>Squad name <small>(anyone can type it)</small></span><input type="text" id="squadin" maxlength="28" placeholder="Noah's Friends" value="${esc(s.squad.value)}" autocomplete="off"></label>` : ''}</div>`;
     }
     // Mirrored buttons from the big screen
-    const acts = s.actions || [];
+    const acts = (s.actions || []).filter((a) => a !== lockAct);
     if (acts.length) {
       let lastSec = null;
       body += `<div class="p-actions">${q && !q.answered ? '<div class="p-sec">Team controls</div>' : ''}${acts.map((a) => {
@@ -167,11 +189,18 @@ export function startPhone(code) {
       }).join('')}</div>`;
     }
     app.innerHTML = `<div class="phone">${hud}${body}</div>`;
+    const sq = $('#squadin');
+    if (sq) {
+      let t = null;
+      sq.oninput = () => { clearTimeout(t); t = setTimeout(() => send({ t: 'squad', name: sq.value }), 350); };
+      sq.onblur = () => setTimeout(() => state && render(), 60);
+    }
     app.onclick = (e) => {
       const z = e.target.closest('.zone');
-      if (z || e.target.closest('#usemine, .pbtn')) Sound.click();
+      if (z || e.target.closest('.pbtn')) Sound.click();
       if (z) { myVote = { i: +z.dataset.i, c: +z.dataset.c }; send({ t: 'vote', key: state.q.key, ...myVote }); navigator.vibrate?.(15); return render(); }
-      if (e.target.closest('#usemine')) { send({ t: 'useMine' }); navigator.vibrate?.(15); return; }
+      const pt = e.target.closest('.pickteam');
+      if (pt) { Sound.click(); send({ t: 'team', key: state.q.key, i: +pt.dataset.i }); navigator.vibrate?.(15); return; }
       const b = e.target.closest('.pbtn');
       if (b) { send({ t: 'action', rid: b.dataset.rid, rv: state.rv }); b.classList.add('pressed'); navigator.vibrate?.(15); }
     };

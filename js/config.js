@@ -46,6 +46,10 @@ export const CONFIDENCE = [
 ];
 export const DEFAULT_CONFIDENCE = 1;
 
+// Phones: true = every pick shows up on the big screen and on every phone the
+// moment it's made. false = picks stay hidden until everyone has picked.
+export const LIVE_PICKS = true;
+
 // No countdown. Speed still counts toward score: answering instantly earns the
 // full bonus, which fades to nothing at 2 minutes (so breaks don't matter).
 export const SPEED_CAP_SECONDS = 120;
@@ -115,7 +119,7 @@ export const SKILLS = {
     { name: 'More than a Hint', mp: 6, desc: 'Practically points at the answer.' },
   ]},
   second: { name: 'Second Guess', tiers: [
-    { name: 'Second Guess', mp: 3, desc: 'If this answer is wrong, it is crossed out and you get one more try (no damage, half EXP).' },
+    { name: 'Second Guess', mp: 3, desc: 'Lock in TWO answers and submit them together. If either one is right it counts (half EXP). If both are wrong, the usual damage.' },
   ]},
   tether: { name: 'Ghostly Tether', tiers: [
     { name: 'Ghostly Tether', mp: 5, desc: 'The next wrong answer does nothing. Once per map.' },
@@ -158,18 +162,21 @@ export const TOPIC_GROUPS = [
   ]},
   { name: 'Brain Teasers', topics: [
     { id: 'colors',     name: 'Color Mixing',      short: 'Colors',    src: 'gen', kind: 'puzzle' },
-    { id: 'spelling',   name: 'Spelling',          short: 'Spelling',  src: 'gen', kind: 'puzzle' },
-    { id: 'math',       name: 'Quick Math',        short: 'Math',      src: 'gen', kind: 'puzzle' },
+    { id: 'spelling',   name: 'Spelling',          short: 'Spelling',  src: 'gen', kind: 'puzzle', maxTier: 2 },
+    { id: 'math',       name: 'Quick Math',        short: 'Math',      src: 'gen', kind: 'puzzle', maxTier: 2 },
     { id: 'patterns',   name: 'Number & Letter Patterns', short: 'Patterns', src: 'gen', kind: 'puzzle' },
     { id: 'shapes',     name: 'Shape Puzzles',     short: 'Shapes',    src: 'gen', kind: 'puzzle' },
     { id: 'logic',      name: 'Logic & Riddles',   short: 'Riddles',   src: 'gen', kind: 'puzzle' },
     { id: 'words',      name: 'Word Play',         short: 'Words',     src: 'gen', kind: 'puzzle' },
     { id: 'oddone',     name: 'Odd One Out',       short: 'Odd one out', src: 'gen', kind: 'puzzle' },
-    { id: 'emoji',      name: 'Emoji Puzzles',     short: 'Emoji',     src: 'gen', kind: 'puzzle' },
+    { id: 'emoji',      name: 'Emoji Puzzles',     short: 'Emoji',     src: 'gen', kind: 'puzzle', maxTier: 2 },
   ]},
 ];
 export const TOPICS = Object.fromEntries(TOPIC_GROUPS.flatMap((g) => g.topics).map((t) => [t.id, t]));
 export const ALL_TOPIC_IDS = Object.keys(TOPICS);
+// Some topics are too easy to ever be hard: Quick Math, Spelling and Emoji only
+// appear as levels 1 and 2 (maxTier). Everything else can be any level.
+export const topicMaxTier = (id) => TOPICS[id]?.maxTier || 4;
 
 // Map generation
 export const REST_CHANCE = 0.05;

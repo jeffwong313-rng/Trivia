@@ -1,7 +1,7 @@
 // Branching node map: rows from the bottom (row 0) up to the boss.
 // Rows alternate 4 and 5 nodes (3 at the start) and every node links to the
 // 3 nearest nodes above, so nearly every step offers 3 paths to choose from.
-import { MODES, MAPS, REST_CHANCE, TOPICS, partyTierShift, statFx } from './config.js';
+import { MODES, MAPS, REST_CHANCE, TOPICS, partyTierShift, statFx, topicMaxTier } from './config.js';
 
 const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
@@ -20,11 +20,16 @@ export function generateMap(mapIndex, ctx) {
   const rows = [];
   const mysteryChance = statFx.mysteryChance(agility);
   let topicBag = [];
-  const nextTopic = (avoid) => {
-    if (!topicBag.length) topicBag = shuffle(topics);
-    let i = topicBag.findIndex((t) => !avoid.has(t));
-    if (i < 0) i = 0;
-    return topicBag.splice(i, 1)[0];
+  // Topics like Quick Math / Spelling / Emoji are only ever levels 1-2, so they
+  // never land on a harder node. If a group only picked such topics, harder
+  // nodes just come down to the hardest level those topics reach.
+  const hardest = Math.max(...topics.map(topicMaxTier));
+  const nextTopic = (avoid, tier) => {
+    const fits = (t) => topicMaxTier(t) >= tier;
+    if (!topicBag.some((t) => fits(t) && !avoid.has(t))) topicBag = shuffle(topics);
+    let i = topicBag.findIndex((t) => fits(t) && !avoid.has(t));
+    if (i < 0) i = topicBag.findIndex(fits);
+    return topicBag.splice(i < 0 ? 0 : i, 1)[0];
   };
 
   for (let r = 0; r < def.rows; r++) {
@@ -40,9 +45,9 @@ export function generateMap(mapIndex, ctx) {
       else if (r > 2 && r < def.rows - 1 && roll < mysteryChance + REST_CHANCE) type = 'rest';
       const node = { id: `${r}-${c}`, row: r, col: c, x, type, next: [], visited: false };
       if (type === 'question') {
-        node.topic = nextTopic(used);
+        node.tier = Math.min(hardest, rollTier(mode, partyMult, mapIndex, r / def.rows));
+        node.topic = nextTopic(used, node.tier);
         used.add(node.topic);
-        node.tier = rollTier(mode, partyMult, mapIndex, r / def.rows);
       }
       row.push(node);
     }
@@ -62,7 +67,7 @@ export function generateMap(mapIndex, ctx) {
         const u = up.find((k) => k.id === id);
         if (u.topic && seenT.has(u.topic) && topics.length > 3) {
           const rowTopics = new Set(up.map((k) => k.topic));
-          const alt = shuffle(topics).find((t) => !rowTopics.has(t) && !seenT.has(t));
+          const alt = shuffle(topics).find((t) => !rowTopics.has(t) && !seenT.has(t) && topicMaxTier(t) >= u.tier);
           if (alt) u.topic = alt;
         }
         if (u.topic) seenT.add(u.topic);

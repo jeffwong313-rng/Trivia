@@ -1,7 +1,7 @@
 // Game rules. All state lives in one plain object (this.s) so a run can be
 // saved, resumed, and mirrored to phones.
 import { MODES, TIERS, CONFIDENCE, MAPS, BOSS, STATS, SKILLS, SCORE, TOPICS, partyById,
-  partyDamageMult, partyExpMult, expToNext, statFx, SPEED_CAP_SECONDS } from './config.js';
+  partyDamageMult, partyExpMult, expToNext, statFx, SPEED_CAP_SECONDS, topicMaxTier } from './config.js';
 import { generateMap, findNode, choices, rollTier, isPuzzleTopic } from './map.js';
 import { hintsFor } from './questions.js';
 import { Feedback } from './feedback.js';
@@ -29,7 +29,7 @@ export class Game {
       mapIndex: 0, map: null,
       phase: 'map', q: null, event: null, boss: null, pendingTopic: null,
       tally: { nodes: 0, maps: 0, correct: 0, wrong: 0, speed: 0, answered: 0 },
-      startedAt: Date.now(),
+      startedAt: Date.now(), activeMs: 0,
     };
     this.src.setTopics(this.s.topics);
     this.startMap(0);
@@ -46,9 +46,14 @@ export class Game {
     s.phase = 'map';
   }
 
-  save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.s)); } catch {} }
+  save() {
+    const now = Date.now();
+    if (this.s) { const gap = now - (this._lastSave || now); if (gap < 5 * 60 * 1000) this.s.activeMs = (this.s.activeMs || 0) + gap; }
+    this._lastSave = now;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.s)); } catch {}
+  }
   static hasSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return s && s.v === VERSION && !['victory', 'defeat'].includes(s.phase) ? s : null; } catch { return null; } }
-  load() { this.s = JSON.parse(localStorage.getItem(SAVE_KEY)); this.src.setTopics(this.s.topics); if (this.s.q) this.s.q.startedAt = Date.now(); }
+  load() { this.s = JSON.parse(localStorage.getItem(SAVE_KEY)); this._lastSave = Date.now(); this.src.setTopics(this.s.topics); if (this.s.q) this.s.q.startedAt = Date.now(); }
   clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch {} }
 
   // ── Derived numbers ────────────────────────────────────────
@@ -68,7 +73,12 @@ export class Game {
     if (m.lethalFromMap !== undefined && this.s.mapIndex >= m.lethalFromMap - 1) return 1;
     return BOSS.mistakesAllowed(this.s.mapIndex) + m.bossExtraMistakes;
   }
-  randomTopic(filter = () => true) { const list = this.s.topics.filter(filter); return pick(list.length ? list : this.s.topics); }
+  // A random enabled topic. Topics that top out at level 2 (Math, Spelling, Emoji) are skipped for harder questions.
+  randomTopic(filter = () => true, tier = 0) {
+    const ok = this.s.topics.filter(filter);
+    const fits = ok.filter((t) => topicMaxTier(t) >= tier);
+    return pick(fits.length ? fits : ok.length ? ok : this.s.topics);
+  }
 
   // ── Moving on the map ──────────────────────────────────────
   moveTo(nodeId) {
@@ -90,13 +100,14 @@ export class Game {
   ask(tier, topic, opts = {}) {
     const s = this.s;
     const q = this.src.get(tier, topic, opts);
+    tier = Math.min(tier, topicMaxTier(q.topic || topic));
     s.q = { q, tier, topic: q.topic || topic, removed: [], hintLevel: 0, dropped: 0, startedAt: Date.now(), answered: null, conf: null,
       bonus: opts.bonus || null, safe: !!opts.safe, secondArmed: false, secondUsed: false, key: q.id + ':' + Date.now() };
     s.phase = s.boss ? 'boss' : 'question';
   }
 
   // ── Party tools during a question ─────────────────────────
-  // "Come on, this is too hard!" — swap for a question from a different topic.
+  // Reroll: a fresh question on the SAME topic. ("Come on, this is too hard!" also drops a level.)
   reroll(easier = false) {
     const s = this.s, cq = s.q;
     if (!cq || cq.answered !== null || s.rerolls <= 0) return false;
@@ -105,21 +116,20 @@ export class Game {
     const tier = easier ? cq.tier - 1 : cq.tier;
     const keep = { dropped: cq.dropped + (easier ? 1 : 0), bonus: cq.bonus, safe: cq.safe };
     this.src.markSeen(cq.q);
-    this.ask(tier, this.randomTopic((t) => t !== cq.topic), { noRepeat: true, bonus: keep.bonus, safe: keep.safe });
+    this.ask(tier, cq.topic, { noRepeat: true, bonus: keep.bonus, safe: keep.safe });
     s.q.dropped = keep.dropped;
     this.save();
     return true;
   }
   // Flag a question (too niche / incomplete / other): it's pulled from the
-  // game, saved for review, and the party gets a free reroll.
+  // game, saved for review, and the party gets a free replacement (same topic).
   flag(reason = 'other', note = '') {
     const s = this.s, cq = s.q;
     if (!cq || cq.answered !== null || cq.q.test) return false;
     this.src.block(cq.q);
     Feedback.add({ ...cq.q, topic: cq.topic }, reason, note);
     const keep = { dropped: cq.dropped, bonus: cq.bonus, safe: cq.safe };
-    const topic = this.s.topics.length > 1 ? this.randomTopic((t) => t !== cq.topic) : cq.topic;
-    this.ask(cq.tier, topic, { noRepeat: true, bonus: keep.bonus, safe: keep.safe });
+    this.ask(cq.tier, cq.topic, { noRepeat: true, bonus: keep.bonus, safe: keep.safe });
     s.q.dropped = keep.dropped;
     this.save();
     return true;
@@ -132,7 +142,7 @@ export class Game {
     if (key === 'eliminate') return cq.removed.length < cq.q.answers.length - 1;
     if (key === 'hint') return cq.hintLevel < s.skills.hint;
     if (key === 'tether') return !s.tetherUsed && !s.tetherArmed;
-    if (key === 'second') return !cq.secondArmed && !cq.secondUsed;
+    if (key === 'second') return !cq.secondArmed && !cq.secondUsed && cq.q.answers.length - cq.removed.length >= 3;
     return true;
   }
   cast(key) {
@@ -146,34 +156,45 @@ export class Game {
       for (let k = 0; k < n && wrong.length; k++) cq.removed.push(wrong.splice(Math.floor(Math.random() * wrong.length), 1)[0]);
       msg = SKILLS.eliminate.tiers[lv - 1].name;
     } else if (key === 'hint') { cq.hintLevel = lv; msg = SKILLS.hint.tiers[lv - 1].name; }
-    else if (key === 'second') { cq.secondArmed = true; msg = 'Second Guess ready: one wrong answer gets a retry.'; }
+    else if (key === 'second') { cq.secondArmed = true; msg = 'Second Guess ready: lock in two answers and submit.'; }
     else if (key === 'tether') { s.tetherArmed = true; msg = 'Ghostly Tether: the next mistake won\'t hurt.'; }
     this.save();
     return msg;
   }
   hints() { const cq = this.s.q; return cq ? hintsFor(cq.q).slice(0, cq.hintLevel) : []; }
 
-  // ── Answering (answer index + confidence 0/1/2 in one go) ───
-  answer(index, conf = 1) {
+  // ── Answering ────────────────────────────────────────────────
+  // answer(index, conf) for one answer, or answer([{ i, c }, { i, c }]) for the
+  // two answers Second Guess lets you lock in together. conf is 0/1/2.
+  // With Second Guess armed you must lock in exactly two (as long as 3+ answers
+  // are left); otherwise exactly one.
+  picksNeeded() {
+    const cq = this.s.q;
+    if (!cq) return 1;
+    return cq.secondArmed && cq.q.answers.length - cq.removed.length >= 3 ? 2 : 1;
+  }
+  answer(pickArg, conf = 1) {
     const s = this.s, cq = s.q;
-    if (!cq || cq.answered !== null || cq.removed.includes(index)) return null;
-    const right = index === cq.q.correct;
+    if (!cq || cq.answered !== null) return null;
+    const raw = Array.isArray(pickArg) ? pickArg : [{ i: pickArg, c: conf }];
+    const picks = raw.filter((p, k) => p && Number.isInteger(p.i) && p.i >= 0 && p.i < cq.q.answers.length
+      && !cq.removed.includes(p.i) && raw.findIndex((x) => x && x.i === p.i) === k);
+    if (picks.length !== this.picksNeeded()) return null;
+    const two = picks.length === 2;
+    if (two) { cq.secondArmed = false; cq.secondUsed = true; }
 
-    // Second Guess: cross out the wrong pick and let the party try again
-    if (!right && cq.secondArmed) {
-      cq.secondArmed = false; cq.secondUsed = true;
-      cq.removed.push(index);
-      this.save();
-      return { retry: true, wrongIndex: index };
-    }
-
+    const hit = picks.find((p) => p.i === cq.q.correct);
+    const right = !!hit;
+    const shown = hit || picks[0];
+    // Right: the confidence on the right answer counts. Both wrong: the gentler of the two.
+    conf = right ? hit.c : Math.min(...picks.map((p) => p.c));
     const elapsed = Math.min(SPEED_CAP_SECONDS, (Date.now() - cq.startedAt) / 1000);
     const speed = 1 - elapsed / SPEED_CAP_SECONDS;
-    cq.answered = index; cq.conf = conf;
+    cq.answered = shown.i; cq.conf = conf; cq.picked = picks.map((p) => p.i);
     const c = CONFIDENCE[conf] || CONFIDENCE[1];
     s.tally.answered++; s.tally.speed += speed;
     this.src.markSeen(cq.q);
-    const result = { right, correctIndex: cq.q.correct, conf, exp: 0, dmg: 0, mp: 0, tethered: false, levelUps: 0 };
+    const result = { right, correctIndex: cq.q.correct, conf, picked: cq.picked, two, exp: 0, dmg: 0, mp: 0, tethered: false, levelUps: 0 };
 
     if (right) {
       s.tally.correct++;
@@ -183,7 +204,7 @@ export class Game {
       if (cq.bonus === 'double') exp *= 2;
       if (cq.secondUsed) exp *= 0.5;
       result.exp = Math.round(exp);
-      result.mp = Math.min(this.maxMp - s.mp, statFx.mpRegen(s.stats.I));
+      result.mp = Math.max(0, Math.min(this.maxMp - s.mp, statFx.mpRegen(s.stats.I)));
       s.mp += result.mp;
       result.levelUps = this.gainExp(result.exp);
     } else {
@@ -320,8 +341,9 @@ export class Game {
       const qd = ev.fx.question;
       const node = findNode(s.map, s.map.current);
       const base = rollTier(s.mode, s.partyMult, s.mapIndex, node ? node.row / s.map.rows.length : 0);
-      const topic = qd.puzzle ? this.randomTopic(isPuzzleTopic) : this.randomTopic();
-      this.ask(Math.max(1, Math.min(4, base + (qd.tierDelta || 0))), topic, { bonus: qd.bonus || null, safe: !!qd.safe });
+      const tier = Math.max(1, Math.min(4, base + (qd.tierDelta || 0)));
+      const topic = qd.puzzle ? this.randomTopic(isPuzzleTopic, tier) : this.randomTopic(() => true, tier);
+      this.ask(tier, topic, { bonus: qd.bonus || null, safe: !!qd.safe });
       this.save();
       return;
     }
@@ -334,7 +356,8 @@ export class Game {
   startBoss() { this.s.boss = { name: this.mapDef.boss, asked: 0, mistakes: 0 }; this.s.phase = 'bossIntro'; }
   askBoss() {
     const s = this.s;
-    this.ask(rollTier(s.mode, s.partyMult, s.mapIndex, 1, BOSS.tierBonus), this.randomTopic());
+    const tier = rollTier(s.mode, s.partyMult, s.mapIndex, 1, BOSS.tierBonus);
+    this.ask(tier, this.randomTopic(() => true, tier));
   }
   beginBossFight() { this.askBoss(); this.save(); }
   bossDefeated() {
@@ -363,16 +386,47 @@ export class Game {
     if (s.recorded) return;
     s.recorded = true;
     if (this.src.testMode) return;               // test runs stay off the leaderboard
+    this.save();                                 // bring the play-time up to date
+    const t = s.tally;
     const entry = {
-      party: s.partyName, players: s.players, size: s.partySize, sizeName: this.party.name, mode: MODES[s.mode].name,
-      maps: s.tally.maps, nodes: s.tally.nodes, correct: s.tally.correct, level: s.level,
-      reached: MAPS[s.mapIndex].name, outcome, score: this.score(), date: new Date().toISOString(),
+      v: 2, id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      party: s.partyName, players: s.players, size: s.partySize, sizeName: this.party.name, modeId: s.mode, mode: MODES[s.mode].name,
+      maps: t.maps, nodes: t.nodes, correct: t.correct, wrong: t.wrong, level: s.level,
+      reached: MAPS[s.mapIndex].name, mapNumber: s.mapIndex + 1, outcome, score: this.score(),
+      stats: { ...s.stats }, skills: { ...s.skills }, activeMs: Math.round(s.activeMs || 0), date: new Date().toISOString(),
     };
     const board = Game.leaderboard();
     board.push(entry);
     board.sort((a, b) => b.score - a.score);
-    try { localStorage.setItem('noah_board', JSON.stringify(board.slice(0, 50))); } catch {}
+    Game.saveBoard(board);
     this.lastEntry = entry;
   }
-  static leaderboard() { try { return JSON.parse(localStorage.getItem('noah_board') || '[]'); } catch { return []; } }
+  // The leaderboard lives on this device (localStorage). It can be exported and imported as JSON.
+  static leaderboard() { try { const b = JSON.parse(localStorage.getItem('noah_board') || '[]'); return Array.isArray(b) ? b : []; } catch { return []; } }
+  static saveBoard(list) { try { localStorage.setItem('noah_board', JSON.stringify(list.slice(0, 200))); } catch {} }
+  static renameEntry(id, name) {
+    const board = Game.leaderboard(), e = board.find((r) => r.id === id);
+    if (!e) return false;
+    e.party = String(name || '').trim().slice(0, 28) || "Noah's Friends";
+    Game.saveBoard(board);
+    return true;
+  }
+  // Merge entries from an export. Returns how many were new.
+  static importBoard(text) {
+    let incoming;
+    try { incoming = JSON.parse(text); } catch { return -1; }
+    if (!Array.isArray(incoming)) return -1;
+    const board = Game.leaderboard();
+    const have = new Set(board.map((r) => r.id || r.date));
+    let added = 0;
+    for (const r of incoming) {
+      if (!r || typeof r !== 'object' || !Number.isFinite(r.score) || !r.party) continue;
+      const key = r.id || r.date;
+      if (key && have.has(key)) continue;
+      board.push(r); have.add(key); added++;
+    }
+    board.sort((a, b) => b.score - a.score);
+    Game.saveBoard(board);
+    return added;
+  }
 }
