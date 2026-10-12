@@ -25,6 +25,8 @@ A cooperative trivia adventure. Noah is a lost little boy, about six — at firs
 - **Boss fights** switch to a dark palette with their own sounds (a low drone, brass stabs); it returns to light afterwards.
 - **Leaderboard 🏆** (title screen, and in the HUD): every finished journey is saved with squad name, players, score, difficulty, party size, maps, nodes, accuracy, stats, skills and play time. Name your squad on the setup screen or phone, or rename it on the end screen. Filter by difficulty/party size; export, copy or import the list. Stored on that device (`noah_board`).
 
+- **Answer reveal:** the right answer always shows, with a "Learn more on Google" link. Optional **auto explanations**: a short "why" written by Claude through a tiny Cloudflare Worker that holds your API key (setup in `worker/README.md`, then paste its URL in Settings). Cached on the device; without it, nothing changes. Bank rows can also carry a hand-written `{"e": "…"}` explanation.
+
 ## Question bank
 
 `js/bank.json` holds the reviewed questions (27,580 rows marked **Keep** in the review sheet; Fix, Cut and unreviewed rows are left out). The game always draws from it first. When a topic runs low (Sports, TV, Tech, Vehicles, Video Games, Books, Board games have ~50 each), Open Trivia DB tops it up online, skipping any question the sheet marked Fix / Cut / unreviewed. Brain teasers are still generated fresh.
@@ -61,6 +63,7 @@ js/art.js           Noah, bosses, shapes, map — all drawn as sketchy SVG
 js/main.js          big-screen UI, keyboard/remote navigation
 js/remote.js        phone room (PeerJS)
 js/audio.js         settings, sound effects, piano theme (Web Audio)
+js/explain.js       optional auto explanations (asks your Worker)
 js/feedback.js      flagged questions saved for review
 js/removed.js       question IDs removed for everyone (paste from the review screen)
 js/phone.js         phone controller UI

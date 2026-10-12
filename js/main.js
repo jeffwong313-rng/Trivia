@@ -6,6 +6,7 @@ import { Sound, Settings, setBossTheme } from './audio.js';
 import { Feedback, FLAG_REASONS, reasonLabel } from './feedback.js';
 import { REMOVED } from './removed.js';
 import { QuestionSource, answerText, learnUrl } from './questions.js';
+import { explainUrl, setExplainUrl, fetchExplain } from './explain.js';
 import { Game } from './game.js';
 import { Room, joinUrl } from './remote.js';
 import { startPhone } from './phone.js';
@@ -241,9 +242,15 @@ function showSettings() {
             <span id="volnum">${Math.round(st.volume * 100)}%</span></label>
           <div class="row small" style="margin-top:8px"><button class="btn small ghost link" data-vol="-10" data-rlabel="Volume down">− Quieter</button><button class="btn small ghost link" data-vol="10" data-rlabel="Volume up">+ Louder</button></div>
         </section>
+        <section data-rsection="Auto explanations">
+          <h3>Auto explanations</h3>
+          <p class="small muted">Optional. Paste your explanation Worker's address to get a short "why" after each answer (see worker/README.md). Needs internet.</p>
+          <input type="text" id="explain-url" placeholder="https://noah-explain.yourname.workers.dev" value="${esc(explainUrl())}" autocomplete="off" style="width:100%;max-width:520px">
+        </section>
         <div class="row" style="margin-top:22px"><button class="btn primary" data-act="back">Done</button></div>
       </div>
     </div>`;
+    $('#explain-url').onchange = (e) => setExplainUrl(e.target.value);
     $('#vol').oninput = (e) => { Settings.set({ volume: +e.target.value / 100 }); $('#volnum').textContent = `${e.target.value}%`; };
     $('#vol').onchange = () => Sound.click();
   };
@@ -828,12 +835,26 @@ function resultHTML() {
   return `<div class="result ${r.right ? 'good' : 'bad'}"><h3>${title}</h3>
     ${r.two ? `<div class="small muted">Second Guess: ${r.picked.map(letter).join(' and ')} locked in together.</div>` : ''}
     <div class="reveal-ans">${r.right ? 'Answer' : 'The answer was'}: <b>${esc(answerText(s.q.q.answers[r.correctIndex]) || 'option ' + letter(r.correctIndex))}</b></div>
-    ${s.q.q.explain ? `<p class="explain">${esc(s.q.q.explain)}</p>` : ''}
+    ${s.q.q.explain ? `<p class="explain">${esc(s.q.q.explain)}</p>` : ui.explaining === s.q.key ? '<p class="explain muted">Looking up why…</p>' : ''}
     ${learnUrl(s.q.q) ? `<a class="learn" href="${learnUrl(s.q.q)}" target="_blank" rel="noopener" data-rlabel="Learn more on Google">🔎 Learn more on Google</a>` : ''}
     <div class="fx">${fx.join('')}</div></div>
     <div class="lockrow"><button class="btn primary" data-act="next">${last} ➜</button></div>`;
 }
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+// Ask the Worker (if set up) for a short "why"; the reveal updates when it lands.
+function startExplain() {
+  const cq = game.s.q;
+  if (!cq || cq.q.explain || !explainUrl()) return;
+  const q = cq.q, key = cq.key;
+  ui.explaining = key;
+  fetchExplain(q).then((text) => {
+    if (ui.explaining !== key) return;
+    ui.explaining = null;
+    if (text && game.s.q && game.s.q.key === key) { game.s.q.q.explain = text; game.save?.(); }
+    rerenderQuestion();
+  });
+}
 
 function lockIn() {
   const picks = ui.sels.map((x) => ({ ...x }));
@@ -841,6 +862,7 @@ function lockIn() {
   const r = game.answer(picks);
   if (!r) return;
   ui.result = r; ui.sels = [];
+  startExplain();
   if (r.right) { Sound.good(); if (r.levelUps) setTimeout(() => Sound.levelUp(), 450); } else Sound.bad();
   refreshHud();
   renderQuestion($('#overlay'));
@@ -1167,7 +1189,7 @@ function remoteState() {
     base.q = {
       key: cq.key, prompt: q.prompt, topic: q.topicName || TOPICS[cq.topic]?.name, subtopic: q.subtopic, tier: cq.tier, visual: q.visual || null,
       answers: q.answers, removed: cq.removed, hints: game.hints(), boss: s.boss ? { name: s.boss.name, asked: s.boss.asked, mistakes: s.boss.mistakes } : null,
-      answered, chosen: cq.answered, conf: cq.conf, correct: answered ? q.correct : null, result: answered && ui.result ? { right: ui.result.right, exp: ui.result.exp, dmg: ui.result.dmg, answer: answerText(q.answers[q.correct]), explain: q.explain || '', learn: learnUrl(q) } : null,
+      answered, chosen: cq.answered, conf: cq.conf, correct: answered ? q.correct : null, result: answered && ui.result ? { right: ui.result.right, exp: ui.result.exp, dmg: ui.result.dmg, answer: answerText(q.answers[q.correct]), explain: q.explain || '', explaining: ui.explaining === cq.key && !q.explain, learn: learnUrl(q) } : null,
       team: ui.sels, need: game.picksNeeded(), ready: ready(), revealed: ui.revealed, votes: ui.revealed ? [...ui.votes.entries()].map(([id, v]) => ({ id, ...v })) : null,
       voted: [...ui.votes.keys()], picked: cq.picked || null,
     };
