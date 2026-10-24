@@ -835,7 +835,7 @@ function resultHTML() {
   return `<div class="result ${r.right ? 'good' : 'bad'}"><h3>${title}</h3>
     ${r.two ? `<div class="small muted">Second Guess: ${r.picked.map(letter).join(' and ')} locked in together.</div>` : ''}
     <div class="reveal-ans">${r.right ? 'Answer' : 'The answer was'}: <b>${esc(answerText(s.q.q.answers[r.correctIndex]) || 'option ' + letter(r.correctIndex))}</b></div>
-    ${s.q.q.explain ? `<p class="explain">${esc(s.q.q.explain)}</p>` : ui.explaining === s.q.key ? '<p class="explain muted">Looking up why…</p>' : ''}
+    ${s.q.q.explain ? `<p class="explain tip"><b>💡 Tip:</b> ${esc(s.q.q.explain)}</p>` : ui.explaining === s.q.key ? '<p class="explain muted">Looking up why…</p>' : ''}
     ${learnUrl(s.q.q) ? `<a class="learn" href="${learnUrl(s.q.q)}" target="_blank" rel="noopener" data-rlabel="Learn more on Google">🔎 Learn more on Google</a>` : ''}
     <div class="fx">${fx.join('')}</div></div>
     <div class="lockrow"><button class="btn primary" data-act="next">${last} ➜</button></div>`;

@@ -170,7 +170,7 @@ export function startPhone(code) {
         ${q.hints?.length ? `<div class="hints">${q.hints.map((h) => `<p>${esc(h)}</p>`).join('')}</div>` : ''}
         ${done ? `<div class="result ${q.result?.right ? 'good' : 'bad'}"><h3>${q.result?.right ? 'Right!' : 'Not quite.'}</h3>${q.result?.exp ? `<span class="chip">+${q.result.exp} EXP</span>` : ''}${q.result?.dmg ? `<span class="chip red">−${q.result.dmg} HP</span>` : ''}
           ${q.result?.answer ? `<div class="reveal-ans">${q.result.right ? 'Answer' : 'The answer was'}: <b>${esc(q.result.answer)}</b></div>` : ''}
-          ${q.result?.explain ? `<p class="explain">${esc(q.result.explain)}</p>` : q.result?.explaining ? '<p class="explain muted">Looking up why…</p>' : ''}
+          ${q.result?.explain ? `<p class="explain tip"><b>💡 Tip:</b> ${esc(q.result.explain)}</p>` : q.result?.explaining ? '<p class="explain muted">Looking up why…</p>' : ''}
           ${q.result?.learn ? `<a class="learn" href="${esc(q.result.learn)}" target="_blank" rel="noopener">🔎 Learn more on Google</a>` : ''}</div>`
           : ''}        ${!done && lockAct ? `<div class="lockbar-wrap"><button class="pbtn primary lock lockbar" data-rid="${lockAct.rid}">${esc(lockAct.label)}</button></div>` : ''}
       </div>`;
